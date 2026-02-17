@@ -19,16 +19,25 @@ func init() {
 			if err != nil {
 				return err
 			}
-			obj, client, err := findContactMulti(cfg, args[0])
+			matches, err := findAllContactsMulti(cfg, args[0])
 			if err != nil {
 				return err
 			}
 
-			setGroup(obj.Card, args[1])
-			if _, err := client.PutAddressObject(context.Background(), obj.Path, obj.Card); err != nil {
-				return fmt.Errorf("updating contact: %w", err)
+			ctx := context.Background()
+			for _, m := range matches {
+				setGroup(m.obj.Card, args[1])
+				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+					return fmt.Errorf("updating contact: %w", err)
+				}
 			}
-			fmt.Printf("Set %s group to %s\n", contactName(*obj), args[1])
+
+			name := contactName(*matches[0].obj)
+			if len(matches) > 1 {
+				fmt.Printf("Set %s group to %s (%d accounts)\n", name, args[1], len(matches))
+			} else {
+				fmt.Printf("Set %s group to %s\n", name, args[1])
+			}
 			return nil
 		},
 	}
@@ -42,16 +51,25 @@ func init() {
 			if err != nil {
 				return err
 			}
-			obj, client, err := findContactMulti(cfg, args[0])
+			matches, err := findAllContactsMulti(cfg, args[0])
 			if err != nil {
 				return err
 			}
 
-			removeGroup(obj.Card)
-			if _, err := client.PutAddressObject(context.Background(), obj.Path, obj.Card); err != nil {
-				return fmt.Errorf("updating contact: %w", err)
+			ctx := context.Background()
+			for _, m := range matches {
+				removeGroup(m.obj.Card)
+				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+					return fmt.Errorf("updating contact: %w", err)
+				}
 			}
-			fmt.Printf("Removed group from %s\n", contactName(*obj))
+
+			name := contactName(*matches[0].obj)
+			if len(matches) > 1 {
+				fmt.Printf("Removed group from %s (%d accounts)\n", name, len(matches))
+			} else {
+				fmt.Printf("Removed group from %s\n", name)
+			}
 			return nil
 		},
 	}

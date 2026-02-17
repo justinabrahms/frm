@@ -98,6 +98,44 @@ func findContactMulti(cfg Config, name string) (*carddav.AddressObject, *carddav
 	return nil, nil, fmt.Errorf("contact %q not found", name)
 }
 
+// contactMatch holds a matched contact and its client, for multi-account mutations.
+type contactMatch struct {
+	obj    *carddav.AddressObject
+	client *carddav.Client
+}
+
+// findAllContactsMulti searches all accounts for contacts matching a name.
+// Returns all matches across all accounts.
+func findAllContactsMulti(cfg Config, name string) ([]contactMatch, error) {
+	ctx := context.Background()
+	nameLower := strings.ToLower(name)
+	var matches []contactMatch
+	for _, svc := range cfg.carddavServices() {
+		client, err := newCardDAVClient(svc)
+		if err != nil {
+			continue
+		}
+		book, err := findAddressBook(ctx, client)
+		if err != nil {
+			continue
+		}
+		objs, err := queryAllContacts(ctx, client, book)
+		if err != nil {
+			continue
+		}
+		for _, obj := range objs {
+			if strings.ToLower(contactName(obj)) == nameLower {
+				o := obj // copy for pointer
+				matches = append(matches, contactMatch{obj: &o, client: client})
+			}
+		}
+	}
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("contact %q not found", name)
+	}
+	return matches, nil
+}
+
 func contactName(obj carddav.AddressObject) string {
 	if fn := strings.TrimSpace(obj.Card.PreferredValue(vcard.FieldFormattedName)); fn != "" {
 		return fn

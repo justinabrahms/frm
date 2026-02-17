@@ -25,16 +25,25 @@ func init() {
 			if err != nil {
 				return err
 			}
-			obj, client, err := findContactMulti(cfg, args[0])
+			matches, err := findAllContactsMulti(cfg, args[0])
 			if err != nil {
 				return err
 			}
 
-			setFrequency(obj.Card, every)
-			if _, err := client.PutAddressObject(context.Background(), obj.Path, obj.Card); err != nil {
-				return fmt.Errorf("updating contact: %w", err)
+			ctx := context.Background()
+			for _, m := range matches {
+				setFrequency(m.obj.Card, every)
+				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+					return fmt.Errorf("updating contact: %w", err)
+				}
 			}
-			fmt.Printf("Tracking %s every %s\n", contactName(*obj), every)
+
+			name := contactName(*matches[0].obj)
+			if len(matches) > 1 {
+				fmt.Printf("Tracking %s every %s (%d accounts)\n", name, every, len(matches))
+			} else {
+				fmt.Printf("Tracking %s every %s\n", name, every)
+			}
 			return nil
 		},
 	}
@@ -49,16 +58,25 @@ func init() {
 			if err != nil {
 				return err
 			}
-			obj, client, err := findContactMulti(cfg, args[0])
+			matches, err := findAllContactsMulti(cfg, args[0])
 			if err != nil {
 				return err
 			}
 
-			removeFrequency(obj.Card)
-			if _, err := client.PutAddressObject(context.Background(), obj.Path, obj.Card); err != nil {
-				return fmt.Errorf("updating contact: %w", err)
+			ctx := context.Background()
+			for _, m := range matches {
+				removeFrequency(m.obj.Card)
+				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+					return fmt.Errorf("updating contact: %w", err)
+				}
 			}
-			fmt.Printf("Stopped tracking %s\n", contactName(*obj))
+
+			name := contactName(*matches[0].obj)
+			if len(matches) > 1 {
+				fmt.Printf("Stopped tracking %s (%d accounts)\n", name, len(matches))
+			} else {
+				fmt.Printf("Stopped tracking %s\n", name)
+			}
 			return nil
 		},
 	}

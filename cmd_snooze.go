@@ -27,16 +27,25 @@ func init() {
 			if err != nil {
 				return err
 			}
-			obj, client, err := findContactMulti(cfg, args[0])
+			matches, err := findAllContactsMulti(cfg, args[0])
 			if err != nil {
 				return err
 			}
 
-			setSnoozeUntil(obj.Card, t)
-			if _, err := client.PutAddressObject(context.Background(), obj.Path, obj.Card); err != nil {
-				return fmt.Errorf("updating contact: %w", err)
+			ctx := context.Background()
+			for _, m := range matches {
+				setSnoozeUntil(m.obj.Card, t)
+				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+					return fmt.Errorf("updating contact: %w", err)
+				}
 			}
-			fmt.Printf("Snoozed %s until %s\n", contactName(*obj), t.Format("2006-01-02"))
+
+			name := contactName(*matches[0].obj)
+			if len(matches) > 1 {
+				fmt.Printf("Snoozed %s until %s (%d accounts)\n", name, t.Format("2006-01-02"), len(matches))
+			} else {
+				fmt.Printf("Snoozed %s until %s\n", name, t.Format("2006-01-02"))
+			}
 			return nil
 		},
 	}
@@ -52,21 +61,32 @@ func init() {
 			if err != nil {
 				return err
 			}
-			obj, client, err := findContactMulti(cfg, args[0])
+			matches, err := findAllContactsMulti(cfg, args[0])
 			if err != nil {
 				return err
 			}
 
-			if _, ok := getSnoozeUntil(obj.Card); !ok {
-				fmt.Printf("%s is not snoozed\n", contactName(*obj))
-				return nil
+			ctx := context.Background()
+			var updated int
+			for _, m := range matches {
+				if _, ok := getSnoozeUntil(m.obj.Card); !ok {
+					continue
+				}
+				removeSnoozeUntil(m.obj.Card)
+				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+					return fmt.Errorf("updating contact: %w", err)
+				}
+				updated++
 			}
 
-			removeSnoozeUntil(obj.Card)
-			if _, err := client.PutAddressObject(context.Background(), obj.Path, obj.Card); err != nil {
-				return fmt.Errorf("updating contact: %w", err)
+			name := contactName(*matches[0].obj)
+			if updated == 0 {
+				fmt.Printf("%s is not snoozed\n", name)
+			} else if updated > 1 {
+				fmt.Printf("Unsnoozed %s (%d accounts)\n", name, updated)
+			} else {
+				fmt.Printf("Unsnoozed %s\n", name)
 			}
-			fmt.Printf("Unsnoozed %s\n", contactName(*obj))
 			return nil
 		},
 	})

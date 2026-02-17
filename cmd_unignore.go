@@ -17,21 +17,32 @@ func init() {
 			if err != nil {
 				return err
 			}
-			obj, client, err := findContactMulti(cfg, args[0])
+			matches, err := findAllContactsMulti(cfg, args[0])
 			if err != nil {
 				return err
 			}
 
-			if !isIgnored(obj.Card) {
-				fmt.Printf("%s is not ignored\n", contactName(*obj))
-				return nil
+			ctx := context.Background()
+			var updated int
+			for _, m := range matches {
+				if !isIgnored(m.obj.Card) {
+					continue
+				}
+				removeIgnored(m.obj.Card)
+				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+					return fmt.Errorf("updating contact: %w", err)
+				}
+				updated++
 			}
 
-			removeIgnored(obj.Card)
-			if _, err := client.PutAddressObject(context.Background(), obj.Path, obj.Card); err != nil {
-				return fmt.Errorf("updating contact: %w", err)
+			name := contactName(*matches[0].obj)
+			if updated == 0 {
+				fmt.Printf("%s is not ignored\n", name)
+			} else if updated > 1 {
+				fmt.Printf("Unignored %s (%d accounts)\n", name, updated)
+			} else {
+				fmt.Printf("Unignored %s\n", name)
 			}
-			fmt.Printf("Unignored %s\n", contactName(*obj))
 			return nil
 		},
 	})
