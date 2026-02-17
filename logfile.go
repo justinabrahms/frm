@@ -11,6 +11,7 @@ import (
 
 type LogEntry struct {
 	Contact string    `json:"contact"`
+	Path    string    `json:"path,omitempty"`
 	Time    time.Time `json:"time"`
 	Note    string    `json:"note,omitempty"`
 }
@@ -62,12 +63,15 @@ func readLog() ([]LogEntry, error) {
 	return entries, scanner.Err()
 }
 
-// lastContactTime returns the most recent log time for each contact name.
+// lastContactTime returns the most recent log time keyed by both contact name and path.
 func lastContactTime(entries []LogEntry) map[string]time.Time {
 	last := make(map[string]time.Time)
 	for _, e := range entries {
 		if e.Time.After(last[e.Contact]) {
 			last[e.Contact] = e.Time
+		}
+		if e.Path != "" && e.Time.After(last[e.Path]) {
+			last[e.Path] = e.Time
 		}
 	}
 	return last

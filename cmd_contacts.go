@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -18,28 +17,27 @@ func init() {
 			if err != nil {
 				return err
 			}
-			client, err := newCardDAVClient(cfg)
-			if err != nil {
-				return err
-			}
-			ctx := context.Background()
-			book, err := findAddressBook(ctx, client)
-			if err != nil {
-				return err
-			}
-			objs, err := queryAllContacts(ctx, client, book)
+			results, err := allContactsMulti(cfg)
 			if err != nil {
 				return err
 			}
 
 			var names []string
-			for _, obj := range objs {
-				name := contactName(obj)
-				if name != "" {
-					names = append(names, name)
+			for _, r := range results {
+				for _, obj := range r.objs {
+					name := contactName(obj)
+					if name != "" {
+						names = append(names, name)
+					}
 				}
 			}
 			sort.Strings(names)
+
+			jsonFlag, _ := cmd.Flags().GetBool("json")
+			if jsonFlag {
+				return printJSON(cmd, names)
+			}
+
 			for _, name := range names {
 				fmt.Println(name)
 			}

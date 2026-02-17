@@ -10,6 +10,8 @@ import (
 )
 
 const fieldFrequency = "X-FRM-FREQUENCY"
+const fieldIgnore = "X-FRM-IGNORE"
+const fieldGroup = "X-FRM-GROUP"
 
 // parseDuration parses a simple duration string like "2w", "1m", "3d".
 func parseDuration(s string) (time.Duration, error) {
@@ -48,4 +50,34 @@ func setFrequency(card vcard.Card, freq string) {
 // removeFrequency removes X-FRM-FREQUENCY from a vCard.
 func removeFrequency(card vcard.Card) {
 	delete(card, fieldFrequency)
+}
+
+// isIgnored checks if a vCard has X-FRM-IGNORE set to "true".
+func isIgnored(card vcard.Card) bool {
+	return card.PreferredValue(fieldIgnore) == "true"
+}
+
+// setIgnored sets X-FRM-IGNORE to "true" on a vCard.
+func setIgnored(card vcard.Card) {
+	card[fieldIgnore] = []*vcard.Field{{Value: "true"}}
+}
+
+// removeIgnored removes X-FRM-IGNORE from a vCard.
+func removeIgnored(card vcard.Card) {
+	delete(card, fieldIgnore)
+}
+
+// getGroup reads X-FRM-GROUP from a vCard.
+func getGroup(card vcard.Card) string {
+	return card.PreferredValue(fieldGroup)
+}
+
+// setGroup sets X-FRM-GROUP on a vCard.
+func setGroup(card vcard.Card, group string) {
+	card[fieldGroup] = []*vcard.Field{{Value: group}}
+}
+
+// removeGroup removes X-FRM-GROUP from a vCard.
+func removeGroup(card vcard.Card) {
+	delete(card, fieldGroup)
 }

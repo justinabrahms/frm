@@ -8,12 +8,45 @@ import (
 )
 
 type Config struct {
-	Endpoint string `json:"endpoint"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Services []ServiceConfig `json:"services"`
+}
+
+type ServiceConfig struct {
+	Type string `json:"type"`
+	// CardDAV fields
+	Endpoint string `json:"endpoint,omitempty"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	// JMAP fields
+	SessionEndpoint string `json:"session_endpoint,omitempty"`
+	Token           string `json:"token,omitempty"`
+	MaxResults      int    `json:"max_results,omitempty"`
+}
+
+func (cfg Config) carddavServices() []ServiceConfig {
+	var out []ServiceConfig
+	for _, s := range cfg.Services {
+		if s.Type == "carddav" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func (cfg Config) jmapServices() []ServiceConfig {
+	var out []ServiceConfig
+	for _, s := range cfg.Services {
+		if s.Type == "jmap" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func configDir() string {
+	if dir := os.Getenv("FRM_CONFIG_DIR"); dir != "" {
+		return dir
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: cannot determine home directory: %v\n", err)
@@ -35,8 +68,20 @@ func loadConfig() (Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("invalid config JSON: %w", err)
 	}
-	if cfg.Endpoint == "" || cfg.Username == "" || cfg.Password == "" {
-		return cfg, fmt.Errorf("config must include endpoint, username, and password")
+
+	carddavSvcs := cfg.carddavServices()
+	if len(carddavSvcs) == 0 {
+		return cfg, fmt.Errorf("config must include at least one carddav service")
+	}
+	for i, svc := range carddavSvcs {
+		if svc.Endpoint == "" || svc.Username == "" || svc.Password == "" {
+			return cfg, fmt.Errorf("carddav service %d must include endpoint, username, and password", i)
+		}
+	}
+	for i, svc := range cfg.jmapServices() {
+		if svc.SessionEndpoint == "" || svc.Token == "" {
+			return cfg, fmt.Errorf("jmap service %d must include session_endpoint and token", i)
+		}
 	}
 	return cfg, nil
 }

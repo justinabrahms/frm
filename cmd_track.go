@@ -25,22 +25,13 @@ func init() {
 			if err != nil {
 				return err
 			}
-			client, err := newCardDAVClient(cfg)
-			if err != nil {
-				return err
-			}
-			ctx := context.Background()
-			book, err := findAddressBook(ctx, client)
-			if err != nil {
-				return err
-			}
-			obj, err := findContactByName(ctx, client, book, args[0])
+			obj, client, err := findContactMulti(cfg, args[0])
 			if err != nil {
 				return err
 			}
 
 			setFrequency(obj.Card, every)
-			if _, err := client.PutAddressObject(ctx, obj.Path, obj.Card); err != nil {
+			if _, err := client.PutAddressObject(context.Background(), obj.Path, obj.Card); err != nil {
 				return fmt.Errorf("updating contact: %w", err)
 			}
 			fmt.Printf("Tracking %s every %s\n", contactName(*obj), every)
@@ -58,22 +49,13 @@ func init() {
 			if err != nil {
 				return err
 			}
-			client, err := newCardDAVClient(cfg)
-			if err != nil {
-				return err
-			}
-			ctx := context.Background()
-			book, err := findAddressBook(ctx, client)
-			if err != nil {
-				return err
-			}
-			obj, err := findContactByName(ctx, client, book, args[0])
+			obj, client, err := findContactMulti(cfg, args[0])
 			if err != nil {
 				return err
 			}
 
 			removeFrequency(obj.Card)
-			if _, err := client.PutAddressObject(ctx, obj.Path, obj.Card); err != nil {
+			if _, err := client.PutAddressObject(context.Background(), obj.Path, obj.Card); err != nil {
 				return fmt.Errorf("updating contact: %w", err)
 			}
 			fmt.Printf("Stopped tracking %s\n", contactName(*obj))

@@ -19,10 +19,21 @@ func init() {
 				Time:    time.Now().UTC(),
 				Note:    note,
 			}
+
+			// Try to resolve the contact path for name normalization
+			cfg, cfgErr := loadConfig()
+			if cfgErr == nil {
+				obj, _, err := findContactMulti(cfg, args[0])
+				if err == nil {
+					entry.Path = obj.Path
+					entry.Contact = contactName(*obj)
+				}
+			}
+
 			if err := appendLog(entry); err != nil {
 				return err
 			}
-			fmt.Printf("Logged interaction with %s\n", args[0])
+			fmt.Printf("Logged interaction with %s\n", entry.Contact)
 			return nil
 		},
 	}

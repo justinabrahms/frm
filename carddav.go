@@ -11,9 +11,9 @@ import (
 	"github.com/emersion/go-webdav/carddav"
 )
 
-func newCardDAVClient(cfg Config) (*carddav.Client, error) {
-	endpoint := strings.TrimSuffix(cfg.Endpoint, "/")
-	httpClient := webdav.HTTPClientWithBasicAuth(http.DefaultClient, cfg.Username, cfg.Password)
+func newCardDAVClient(svc ServiceConfig) (*carddav.Client, error) {
+	endpoint := strings.TrimSuffix(svc.Endpoint, "/")
+	httpClient := webdav.HTTPClientWithBasicAuth(http.DefaultClient, svc.Username, svc.Password)
 	client, err := carddav.NewClient(httpClient, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("connecting to CardDAV: %w", err)
@@ -64,14 +64,85 @@ func findContactByName(ctx context.Context, client *carddav.Client, book *cardda
 	}
 	nameLower := strings.ToLower(name)
 	for _, obj := range objs {
-		fn := obj.Card.PreferredValue(vcard.FieldFormattedName)
-		if strings.ToLower(fn) == nameLower {
+		if strings.ToLower(contactName(obj)) == nameLower {
 			return &obj, nil
 		}
 	}
 	return nil, fmt.Errorf("contact %q not found", name)
 }
 
+// findContactMulti searches all accounts for a contact by name.
+// Returns the matching object and the client it belongs to.
+func findContactMulti(cfg Config, name string) (*carddav.AddressObject, *carddav.Client, error) {
+	ctx := context.Background()
+	nameLower := strings.ToLower(name)
+	for _, svc := range cfg.carddavServices() {
+		client, err := newCardDAVClient(svc)
+		if err != nil {
+			continue
+		}
+		book, err := findAddressBook(ctx, client)
+		if err != nil {
+			continue
+		}
+		objs, err := queryAllContacts(ctx, client, book)
+		if err != nil {
+			continue
+		}
+		for _, obj := range objs {
+			if strings.ToLower(contactName(obj)) == nameLower {
+				return &obj, client, nil
+			}
+		}
+	}
+	return nil, nil, fmt.Errorf("contact %q not found", name)
+}
+
 func contactName(obj carddav.AddressObject) string {
-	return obj.Card.PreferredValue(vcard.FieldFormattedName)
+	if fn := strings.TrimSpace(obj.Card.PreferredValue(vcard.FieldFormattedName)); fn != "" {
+		return fn
+	}
+	// Fall back to structured N field: Family;Given;Additional;Prefix;Suffix
+	n := obj.Card.Name()
+	if n != nil {
+		parts := []string{}
+		if n.GivenName != "" {
+			parts = append(parts, n.GivenName)
+		}
+		if n.FamilyName != "" {
+			parts = append(parts, n.FamilyName)
+		}
+		if name := strings.Join(parts, " "); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+// clientAndContacts holds a client and its fetched contacts, used for multi-account iteration.
+type clientAndContacts struct {
+	client *carddav.Client
+	objs   []carddav.AddressObject
+}
+
+// allContactsMulti fetches contacts from all configured accounts.
+func allContactsMulti(cfg Config) ([]clientAndContacts, error) {
+	ctx := context.Background()
+	var results []clientAndContacts
+	for _, svc := range cfg.carddavServices() {
+		client, err := newCardDAVClient(svc)
+		if err != nil {
+			return nil, err
+		}
+		book, err := findAddressBook(ctx, client)
+		if err != nil {
+			return nil, err
+		}
+		objs, err := queryAllContacts(ctx, client, book)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, clientAndContacts{client: client, objs: objs})
+	}
+	return results, nil
 }
