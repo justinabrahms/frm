@@ -249,7 +249,10 @@ func TestE2E_List(t *testing.T) {
 	env.backend.seedContact("Bob", "")       // untracked
 	env.backend.seedContact("Charlie", "1m") // tracked
 
-	// Default: only tracked contacts
+	// Set a group on Alice
+	env.run(t, "group", "set", "Alice", "friends")
+
+	// Default: only tracked contacts, with frequency and group
 	stdout, _, err := env.run(t, "list")
 	if err != nil {
 		t.Fatalf("frm list failed: %v", err)
@@ -258,8 +261,17 @@ func TestE2E_List(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 tracked contacts, got %d: %q", len(lines), stdout)
 	}
-	if lines[0] != "Alice" || lines[1] != "Charlie" {
-		t.Errorf("expected [Alice Charlie], got %v", lines)
+	if !strings.Contains(lines[0], "Alice") || !strings.Contains(lines[0], "every 2w") {
+		t.Errorf("expected Alice with frequency, got: %s", lines[0])
+	}
+	if !strings.Contains(lines[0], "[friends]") {
+		t.Errorf("expected [friends] group tag, got: %s", lines[0])
+	}
+	if !strings.Contains(lines[0], "due") {
+		t.Errorf("expected due info, got: %s", lines[0])
+	}
+	if !strings.Contains(lines[1], "Charlie") || !strings.Contains(lines[1], "every 1m") {
+		t.Errorf("expected Charlie with frequency, got: %s", lines[1])
 	}
 	if strings.Contains(stdout, "Bob") {
 		t.Error("untracked Bob should not appear in list")
@@ -283,6 +295,19 @@ func TestE2E_List(t *testing.T) {
 	}
 	if strings.Contains(stdout, "Alice") {
 		t.Error("ignored Alice should not appear in list")
+	}
+
+	// JSON output includes structured data
+	env.run(t, "unignore", "Alice")
+	stdout, _, err = env.run(t, "list", "--json")
+	if err != nil {
+		t.Fatalf("frm list --json failed: %v", err)
+	}
+	if !strings.Contains(stdout, `"frequency"`) {
+		t.Errorf("expected frequency in JSON, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, `"due_in_days"`) {
+		t.Errorf("expected due_in_days in JSON, got: %s", stdout)
 	}
 }
 
