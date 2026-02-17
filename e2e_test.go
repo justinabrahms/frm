@@ -1134,6 +1134,95 @@ func TestE2E_SnoozeAbsoluteDate(t *testing.T) {
 	}
 }
 
+func TestE2E_Spread(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "1m")
+	env.backend.seedContact("Bob", "1m")
+	env.backend.seedContact("Charlie", "1m")
+	env.backend.seedContact("Dana", "2w") // different frequency
+
+	// All 4 are never-contacted and tracked → all overdue
+	stdout, _, err := env.run(t, "check")
+	if err != nil {
+		t.Fatalf("frm check failed: %v", err)
+	}
+	for _, name := range []string{"Alice", "Bob", "Charlie", "Dana"} {
+		if !strings.Contains(stdout, name) {
+			t.Errorf("expected %s in check output before spread", name)
+		}
+	}
+
+	// Dry run
+	stdout, _, err = env.run(t, "spread", "--dry-run")
+	if err != nil {
+		t.Fatalf("frm spread --dry-run failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Dry run") {
+		t.Errorf("expected dry run message, got: %s", stdout)
+	}
+	// Verify no snooze was actually set
+	for _, name := range []string{"Alice", "Bob", "Charlie", "Dana"} {
+		card := env.getContactCard(name)
+		if card.PreferredValue(fieldSnoozeUntil) != "" {
+			t.Errorf("%s should not be snoozed after dry run", name)
+		}
+	}
+
+	// Real run
+	stdout, _, err = env.run(t, "spread")
+	if err != nil {
+		t.Fatalf("frm spread failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Spread 4 contacts") {
+		t.Errorf("expected spread summary, got: %s", stdout)
+	}
+
+	// First contact in each group (alphabetically) should be due now (snoozed until today)
+	// Others should be snoozed into the future
+	// Check that at least some contacts are now snoozed
+	snoozed := 0
+	for _, name := range []string{"Alice", "Bob", "Charlie", "Dana"} {
+		card := env.getContactCard(name)
+		if card.PreferredValue(fieldSnoozeUntil) != "" {
+			snoozed++
+		}
+	}
+	if snoozed == 0 {
+		t.Error("expected at least some contacts to be snoozed after spread")
+	}
+
+	// Check should now show fewer overdue contacts
+	stdout, _, err = env.run(t, "check")
+	if err != nil {
+		t.Fatalf("frm check after spread failed: %v", err)
+	}
+	// At minimum, the snoozed ones should be hidden
+	if strings.Contains(stdout, "Bob") && strings.Contains(stdout, "Charlie") {
+		t.Errorf("expected some monthly contacts to be snoozed out of check, got: %s", stdout)
+	}
+}
+
+func TestE2E_SpreadSkipsContacted(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "1m")
+	env.backend.seedContact("Bob", "1m")
+
+	// Log an interaction with Alice
+	env.run(t, "log", "Alice", "--note", "coffee")
+
+	stdout, _, err := env.run(t, "spread")
+	if err != nil {
+		t.Fatalf("frm spread failed: %v", err)
+	}
+	// Only Bob should be spread (Alice was already contacted)
+	if !strings.Contains(stdout, "Bob") {
+		t.Errorf("expected Bob in spread output, got: %s", stdout)
+	}
+	if strings.Contains(stdout, "Alice") {
+		t.Errorf("Alice should be skipped (already contacted), got: %s", stdout)
+	}
+}
+
 func TestE2E_ContextNoEmail(t *testing.T) {
 	messages := map[string][]mockMessage{
 		"alice@example.com": {
