@@ -40,7 +40,7 @@ func init() {
 
 			for _, r := range results {
 				for _, obj := range r.objs {
-					if isIgnored(obj.Card) {
+					if isIgnored(obj.Card) || isSnoozed(obj.Card) {
 						continue
 					}
 					freq := getFrequency(obj.Card)

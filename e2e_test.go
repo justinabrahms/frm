@@ -965,6 +965,132 @@ func TestE2E_Ignore(t *testing.T) {
 	}
 }
 
+func TestE2E_LogWhen(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "2w")
+
+	// Log with absolute date
+	stdout, _, err := env.run(t, "log", "Alice", "--note", "coffee", "--when", "2025-06-15")
+	if err != nil {
+		t.Fatalf("frm log --when failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Logged interaction with Alice") {
+		t.Errorf("unexpected output: %s", stdout)
+	}
+
+	data, err := os.ReadFile(filepath.Join(env.configDir, "log.jsonl"))
+	if err != nil {
+		t.Fatalf("reading log: %v", err)
+	}
+	var entry LogEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		t.Fatalf("parsing log: %v", err)
+	}
+	if entry.Time.Format("2006-01-02") != "2025-06-15" {
+		t.Errorf("expected 2025-06-15, got %s", entry.Time.Format("2006-01-02"))
+	}
+
+	// Log with relative date
+	stdout, _, err = env.run(t, "log", "Alice", "--note", "lunch", "--when", "-1w")
+	if err != nil {
+		t.Fatalf("frm log --when relative failed: %v", err)
+	}
+
+	// Read second entry
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	// Re-read since we appended
+	data, _ = os.ReadFile(filepath.Join(env.configDir, "log.jsonl"))
+	lines = strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected 2 log entries, got %d", len(lines))
+	}
+	var entry2 LogEntry
+	json.Unmarshal([]byte(lines[1]), &entry2)
+	daysSince := int(time.Since(entry2.Time).Hours() / 24)
+	if daysSince < 5 || daysSince > 9 {
+		t.Errorf("expected ~7 days ago, got %d days ago", daysSince)
+	}
+}
+
+func TestE2E_Snooze(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Tracy", "3m")
+
+	// Tracy is overdue (never contacted)
+	stdout, _, err := env.run(t, "check")
+	if err != nil {
+		t.Fatalf("frm check failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Tracy") {
+		t.Errorf("Tracy should be overdue, got: %s", stdout)
+	}
+
+	// Snooze Tracy for 2 months
+	stdout, _, err = env.run(t, "snooze", "Tracy", "--until", "2m")
+	if err != nil {
+		t.Fatalf("frm snooze failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Snoozed Tracy until") {
+		t.Errorf("unexpected output: %s", stdout)
+	}
+
+	// Tracy should not appear in check now
+	stdout, _, err = env.run(t, "check")
+	if err != nil {
+		t.Fatalf("frm check failed: %v", err)
+	}
+	if strings.Contains(stdout, "Tracy") {
+		t.Errorf("snoozed Tracy should not appear in check, got: %s", stdout)
+	}
+
+	// Verify vCard field is set
+	card := env.getContactCard("Tracy")
+	if card.PreferredValue(fieldSnoozeUntil) == "" {
+		t.Error("expected X-FRM-SNOOZE-UNTIL to be set")
+	}
+
+	// Unsnooze
+	stdout, _, err = env.run(t, "unsnooze", "Tracy")
+	if err != nil {
+		t.Fatalf("frm unsnooze failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Unsnoozed Tracy") {
+		t.Errorf("unexpected output: %s", stdout)
+	}
+
+	// Tracy should be back in check
+	stdout, _, err = env.run(t, "check")
+	if err != nil {
+		t.Fatalf("frm check failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Tracy") {
+		t.Errorf("unsnoozed Tracy should appear in check, got: %s", stdout)
+	}
+}
+
+func TestE2E_SnoozeAbsoluteDate(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "1w")
+
+	// Snooze with absolute future date
+	stdout, _, err := env.run(t, "snooze", "Alice", "--until", "2099-12-31")
+	if err != nil {
+		t.Fatalf("frm snooze failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Snoozed Alice until 2099-12-31") {
+		t.Errorf("unexpected output: %s", stdout)
+	}
+
+	// Should not appear in check
+	stdout, _, err = env.run(t, "check")
+	if err != nil {
+		t.Fatalf("frm check failed: %v", err)
+	}
+	if strings.Contains(stdout, "Alice") {
+		t.Errorf("snoozed Alice should not appear in check")
+	}
+}
+
 func TestE2E_ContextNoEmail(t *testing.T) {
 	messages := map[string][]mockMessage{
 		"alice@example.com": {

@@ -14,9 +14,22 @@ func init() {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			note, _ := cmd.Flags().GetString("note")
+			when, _ := cmd.Flags().GetString("when")
+
+			var ts time.Time
+			if when != "" {
+				var err error
+				ts, err = parseWhen(when)
+				if err != nil {
+					return err
+				}
+			} else {
+				ts = time.Now().UTC()
+			}
+
 			entry := LogEntry{
 				Contact: args[0],
-				Time:    time.Now().UTC(),
+				Time:    ts,
 				Note:    note,
 			}
 
@@ -38,5 +51,6 @@ func init() {
 		},
 	}
 	logCmd.Flags().String("note", "", "Note about the interaction")
+	logCmd.Flags().String("when", "", "When it happened (e.g. 2024-01-15 or -2w)")
 	rootCmd.AddCommand(logCmd)
 }
