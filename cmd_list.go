@@ -95,25 +95,36 @@ func init() {
 				fmt.Println("No tracked contacts. Use 'frm track' to start tracking someone.")
 				return nil
 			}
+
+			// Compute column widths
+			nameW, freqW, groupW := 4, 4, 5 // "NAME", "FREQ", "GROUP"
 			for _, e := range list {
-				line := e.Name
-				if e.Frequency != "" {
-					line += fmt.Sprintf(" (every %s)", e.Frequency)
+				if len(e.Name) > nameW {
+					nameW = len(e.Name)
 				}
-				if e.Group != "" {
-					line += fmt.Sprintf(" [%s]", e.Group)
+				if len(e.Frequency) > freqW {
+					freqW = len(e.Frequency)
 				}
+				if len(e.Group) > groupW {
+					groupW = len(e.Group)
+				}
+			}
+
+			fmtStr := fmt.Sprintf("%%-%ds  %%-%ds  %%-%ds  %%s\n", nameW, freqW, groupW)
+			fmt.Printf(fmtStr, "NAME", "FREQ", "GROUP", "DUE")
+			for _, e := range list {
+				due := ""
 				if e.DueIn != nil {
 					days := *e.DueIn
 					if days < 0 {
-						line += fmt.Sprintf(" — overdue by %dd", -days)
+						due = fmt.Sprintf("overdue %dd", -days)
 					} else if days == 0 {
-						line += " — due now"
+						due = "now"
 					} else {
-						line += fmt.Sprintf(" — due in %dd", days)
+						due = fmt.Sprintf("in %dd", days)
 					}
 				}
-				fmt.Println(line)
+				fmt.Printf(fmtStr, e.Name, e.Frequency, e.Group, due)
 			}
 			return nil
 		},

@@ -252,26 +252,26 @@ func TestE2E_List(t *testing.T) {
 	// Set a group on Alice
 	env.run(t, "group", "set", "Alice", "friends")
 
-	// Default: only tracked contacts, with frequency and group
+	// Default: only tracked contacts, with frequency and group in table
 	stdout, _, err := env.run(t, "list")
 	if err != nil {
 		t.Fatalf("frm list failed: %v", err)
 	}
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 tracked contacts, got %d: %q", len(lines), stdout)
+	if len(lines) != 3 { // header + 2 contacts
+		t.Fatalf("expected 3 lines (header + 2 contacts), got %d: %q", len(lines), stdout)
 	}
-	if !strings.Contains(lines[0], "Alice") || !strings.Contains(lines[0], "every 2w") {
-		t.Errorf("expected Alice with frequency, got: %s", lines[0])
+	if !strings.Contains(lines[0], "NAME") || !strings.Contains(lines[0], "FREQ") {
+		t.Errorf("expected table header, got: %s", lines[0])
 	}
-	if !strings.Contains(lines[0], "[friends]") {
-		t.Errorf("expected [friends] group tag, got: %s", lines[0])
+	if !strings.Contains(lines[1], "Alice") || !strings.Contains(lines[1], "2w") {
+		t.Errorf("expected Alice with frequency, got: %s", lines[1])
 	}
-	if !strings.Contains(lines[0], "due") {
-		t.Errorf("expected due info, got: %s", lines[0])
+	if !strings.Contains(lines[1], "friends") {
+		t.Errorf("expected friends group, got: %s", lines[1])
 	}
-	if !strings.Contains(lines[1], "Charlie") || !strings.Contains(lines[1], "every 1m") {
-		t.Errorf("expected Charlie with frequency, got: %s", lines[1])
+	if !strings.Contains(lines[2], "Charlie") || !strings.Contains(lines[2], "1m") {
+		t.Errorf("expected Charlie with frequency, got: %s", lines[2])
 	}
 	if strings.Contains(stdout, "Bob") {
 		t.Error("untracked Bob should not appear in list")
@@ -283,8 +283,8 @@ func TestE2E_List(t *testing.T) {
 		t.Fatalf("frm list --all failed: %v", err)
 	}
 	lines = strings.Split(strings.TrimSpace(stdout), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("expected 3 contacts with --all, got %d: %q", len(lines), stdout)
+	if len(lines) != 4 { // header + 3 contacts
+		t.Fatalf("expected 4 lines (header + 3 contacts) with --all, got %d: %q", len(lines), stdout)
 	}
 
 	// Ignored contacts excluded from default list
