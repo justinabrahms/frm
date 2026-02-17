@@ -69,6 +69,16 @@ func loadConfig() (Config, error) {
 		return cfg, fmt.Errorf("invalid config JSON: %w", err)
 	}
 
+	knownTypes := map[string]bool{"carddav": true, "jmap": true}
+	for i, svc := range cfg.Services {
+		if svc.Type == "" {
+			return cfg, fmt.Errorf("service %d has no type (must be \"carddav\" or \"jmap\")", i)
+		}
+		if !knownTypes[svc.Type] {
+			fmt.Fprintf(os.Stderr, "WARNING: service %d has unknown type %q (expected \"carddav\" or \"jmap\") — skipping\n", i, svc.Type)
+		}
+	}
+
 	carddavSvcs := cfg.carddavServices()
 	if len(carddavSvcs) == 0 {
 		return cfg, fmt.Errorf("config must include at least one carddav service")
