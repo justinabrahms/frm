@@ -4,36 +4,71 @@ Friend Relationship Manager — a CLI tool for tracking contact frequency with f
 
 ## Setup
 
-Create `~/.frm/config.json`:
+Create `~/.frm/config.json` with at least one CardDAV service. iCloud is the most common setup.
+
+### iCloud
+
+1. Go to [account.apple.com](https://account.apple.com)
+2. Sign in, then navigate to **Sign-In and Security** > **App-Specific Passwords**
+3. Generate a new password (label it "frm" or similar)
+4. Use your Apple ID email as the username
 
 ```json
 {
   "services": [
     {
       "type": "carddav",
-      "endpoint": "https://carddav.fastmail.com/dav/addressbooks/user/you@example.com/Default",
-      "username": "you@example.com",
-      "password": "your-app-password"
+      "endpoint": "https://contacts.icloud.com",
+      "username": "you@icloud.com",
+      "password": "xxxx-xxxx-xxxx-xxxx"
     }
   ]
 }
 ```
 
-For multiple CardDAV accounts or a JMAP email provider:
+### Fastmail
+
+Use your Fastmail app password. The endpoint includes your username:
+
+```json
+{
+  "type": "carddav",
+  "endpoint": "https://carddav.fastmail.com/dav/addressbooks/user/you@example.com/Default",
+  "username": "you@example.com",
+  "password": "your-app-password"
+}
+```
+
+### Google Contacts
+
+Use an app password (requires 2-step verification on your Google account):
+
+```json
+{
+  "type": "carddav",
+  "endpoint": "https://www.googleapis.com/.well-known/carddav",
+  "username": "you@gmail.com",
+  "password": "your-app-password"
+}
+```
+
+### Multiple accounts and JMAP
+
+You can combine multiple CardDAV accounts and add a JMAP email provider for context:
 
 ```json
 {
   "services": [
     {
       "type": "carddav",
-      "endpoint": "https://carddav.fastmail.com/dav/addressbooks/user/you@example.com/Default",
-      "username": "you@example.com",
-      "password": "your-app-password"
+      "endpoint": "https://contacts.icloud.com",
+      "username": "you@icloud.com",
+      "password": "xxxx-xxxx-xxxx-xxxx"
     },
     {
       "type": "carddav",
-      "endpoint": "https://contacts.google.com/.well-known/carddav",
-      "username": "you@work.com",
+      "endpoint": "https://carddav.fastmail.com/dav/addressbooks/user/you@example.com/Default",
+      "username": "you@example.com",
       "password": "your-app-password"
     },
     {
