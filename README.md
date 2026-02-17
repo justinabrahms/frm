@@ -93,6 +93,8 @@ frm track "Alice" --every 2w       Track Alice every 2 weeks
 frm untrack "Alice"                Stop tracking Alice
 frm log "Alice" --note "coffee"    Log an interaction
 frm log "Alice" --when -2w         Log an interaction that happened 2 weeks ago
+frm list                           List tracked contacts (table format)
+frm list --all                     List all contacts, not just tracked
 frm check                          Show overdue contacts
 frm triage                         Walk through untagged contacts interactively
 frm triage --json                  List untriaged contacts as JSON (for LLM use)
@@ -101,8 +103,11 @@ frm unignore "Alice"               Reverse an ignore decision
 frm snooze "Alice" --until 2m      Hide from check until 2 months from now
 frm snooze "Alice" --until 2026-04-01  Hide from check until a specific date
 frm unsnooze "Alice"               Remove a snooze
+frm spread                         Preview spreading never-contacted people
+frm spread --apply                 Apply the spread (snooze with random dates)
 frm history "Alice"                Show interaction log for a contact
 frm context "Alice"                Pre-meeting prep: summary of a contact
+frm show "Alice"                   Alias for context
 frm stats                          Dashboard: tracked, overdue, most/least contacted
 frm group set "Alice" friends      Assign a contact to a group
 frm group unset "Alice"            Remove a contact from its group
@@ -154,6 +159,30 @@ Relative format: `-Nd` (days ago), `-Nw` (weeks ago), `-Nm` (months ago).
 - `frm snooze "Tracy" --until 2026-04-01` — absolute date
 - `frm snooze "Tracy" --until 2m` — relative (2 months from now)
 - `frm unsnooze "Tracy"` — remove the snooze early
+
+### Listing contacts
+
+`frm list` shows tracked contacts in a table with name, frequency, group, and due date:
+
+```
+NAME            FREQ  GROUP    DUE
+Alice Smith     2w    friends  in 5d
+Bob Jones       1m             overdue 3d
+Carol White     3m    family   now
+```
+
+Use `--all` to include untracked contacts. Use `--json` for structured output with `due_in_days`.
+
+### Spreading contacts after import
+
+After a big import, all never-contacted people show as overdue at once. `frm spread` assigns each one a random snooze date between now and their frequency interval, so they trickle in over time instead of arriving all at once.
+
+```
+frm spread              # dry run — shows what would happen
+frm spread --apply      # actually set the snoozes
+```
+
+Only affects tracked contacts that have never been contacted and aren't already snoozed.
 
 ### Duration format
 
