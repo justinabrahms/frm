@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sort"
 	"time"
 
@@ -108,9 +109,9 @@ Only affects tracked contacts that have never been contacted.`,
 
 				fmt.Printf("%s (%d contacts, every %s):\n", freq, n, freq)
 
-				for i, c := range group {
-					// Contact i comes due in interval * i / n
-					dueIn := time.Duration(float64(c.dur) * float64(i) / float64(n))
+				for _, c := range group {
+					// Random date between now and the contact's frequency interval
+					dueIn := time.Duration(rand.Int63n(int64(c.dur)))
 					snoozeDate := now.Add(dueIn)
 					dueInDays := int(dueIn.Hours() / 24)
 
