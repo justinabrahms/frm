@@ -10,9 +10,10 @@ import (
 
 func init() {
 	rootCmd.AddCommand(&cobra.Command{
-		Use:   "context <name>",
-		Short: "Pre-meeting prep: show contact summary",
-		Args:  cobra.ExactArgs(1),
+		Use:     "context <name>",
+		Aliases: []string{"show", "detail"},
+		Short:   "Pre-meeting prep: show contact summary",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
