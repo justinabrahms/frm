@@ -22,7 +22,7 @@ get a steady trickle instead of a wall of overdue contacts.
 
 Only affects tracked contacts that have never been contacted.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			apply, _ := cmd.Flags().GetBool("apply")
 
 			cfg, err := loadConfig()
 			if err != nil {
@@ -114,7 +114,7 @@ Only affects tracked contacts that have never been contacted.`,
 					snoozeDate := now.Add(dueIn)
 					dueInDays := int(dueIn.Hours() / 24)
 
-					if dryRun {
+					if !apply {
 						fmt.Printf("  %s → due in %dd\n", c.name, dueInDays)
 					} else {
 						obj := &results[c.rIndex].objs[c.oIndex]
@@ -129,14 +129,14 @@ Only affects tracked contacts that have never been contacted.`,
 				}
 			}
 
-			if dryRun {
-				fmt.Printf("\nDry run: would snooze %d contacts. Run without --dry-run to apply.\n", total)
+			if !apply {
+				fmt.Printf("\nDry run: would snooze %d contacts. Run with --apply to execute.\n", total)
 			} else {
 				fmt.Printf("\nSpread %d contacts across their intervals.\n", total)
 			}
 			return nil
 		},
 	}
-	spreadCmd.Flags().Bool("dry-run", false, "Show what would be scheduled without making changes")
+	spreadCmd.Flags().Bool("apply", false, "Actually apply the snoozes (default is dry run)")
 	rootCmd.AddCommand(spreadCmd)
 }

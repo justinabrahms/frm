@@ -1152,10 +1152,10 @@ func TestE2E_Spread(t *testing.T) {
 		}
 	}
 
-	// Dry run
-	stdout, _, err = env.run(t, "spread", "--dry-run")
+	// Default is dry run
+	stdout, _, err = env.run(t, "spread")
 	if err != nil {
-		t.Fatalf("frm spread --dry-run failed: %v", err)
+		t.Fatalf("frm spread (dry run) failed: %v", err)
 	}
 	if !strings.Contains(stdout, "Dry run") {
 		t.Errorf("expected dry run message, got: %s", stdout)
@@ -1168,8 +1168,8 @@ func TestE2E_Spread(t *testing.T) {
 		}
 	}
 
-	// Real run
-	stdout, _, err = env.run(t, "spread")
+	// Real run with --apply
+	stdout, _, err = env.run(t, "spread", "--apply")
 	if err != nil {
 		t.Fatalf("frm spread failed: %v", err)
 	}
@@ -1210,7 +1210,7 @@ func TestE2E_SpreadSkipsContacted(t *testing.T) {
 	// Log an interaction with Alice
 	env.run(t, "log", "Alice", "--note", "coffee")
 
-	stdout, _, err := env.run(t, "spread")
+	stdout, _, err := env.run(t, "spread", "--apply")
 	if err != nil {
 		t.Fatalf("frm spread failed: %v", err)
 	}
