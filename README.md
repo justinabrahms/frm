@@ -8,15 +8,10 @@ Built to be driven by AI agents. Your agent checks who you're overdue to reach o
 
 ## Install
 
+Download a prebuilt binary from [Releases](https://github.com/justinabrahms/frm/releases), or install with Go:
+
 ```
 go install github.com/justinabrahms/frm@latest
-```
-
-Or build from source:
-
-```
-git clone https://github.com/justinabrahms/frm
-cd frm && go build .
 ```
 
 ## Quick start
