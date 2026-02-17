@@ -243,6 +243,49 @@ func (e *testEnv) getContactCard(name string) vcard.Card {
 // E2E tests
 // ---------------------------------------------------------------------------
 
+func TestE2E_List(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "2w")  // tracked
+	env.backend.seedContact("Bob", "")       // untracked
+	env.backend.seedContact("Charlie", "1m") // tracked
+
+	// Default: only tracked contacts
+	stdout, _, err := env.run(t, "list")
+	if err != nil {
+		t.Fatalf("frm list failed: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 tracked contacts, got %d: %q", len(lines), stdout)
+	}
+	if lines[0] != "Alice" || lines[1] != "Charlie" {
+		t.Errorf("expected [Alice Charlie], got %v", lines)
+	}
+	if strings.Contains(stdout, "Bob") {
+		t.Error("untracked Bob should not appear in list")
+	}
+
+	// --all: everyone
+	stdout, _, err = env.run(t, "list", "--all")
+	if err != nil {
+		t.Fatalf("frm list --all failed: %v", err)
+	}
+	lines = strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 contacts with --all, got %d: %q", len(lines), stdout)
+	}
+
+	// Ignored contacts excluded from default list
+	env.run(t, "ignore", "Alice")
+	stdout, _, err = env.run(t, "list")
+	if err != nil {
+		t.Fatalf("frm list failed: %v", err)
+	}
+	if strings.Contains(stdout, "Alice") {
+		t.Error("ignored Alice should not appear in list")
+	}
+}
+
 func TestE2E_Contacts(t *testing.T) {
 	env := setupTest(t)
 	env.backend.seedContact("Charlie", "")
