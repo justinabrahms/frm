@@ -1248,6 +1248,60 @@ func TestE2E_SpreadSkipsContacted(t *testing.T) {
 	}
 }
 
+func TestE2E_Add(t *testing.T) {
+	env := setupTest(t)
+
+	// Add a basic contact
+	stdout, _, err := env.run(t, "add", "Jane Doe")
+	if err != nil {
+		t.Fatalf("frm add failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Added contact Jane Doe") {
+		t.Errorf("unexpected output: %s", stdout)
+	}
+
+	// Verify the contact exists via contacts command
+	stdout, _, err = env.run(t, "contacts")
+	if err != nil {
+		t.Fatalf("frm contacts failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Jane Doe") {
+		t.Errorf("expected Jane Doe in contacts, got: %s", stdout)
+	}
+
+	// Add a contact with all optional fields
+	stdout, _, err = env.run(t, "add", "Bob Smith",
+		"--email", "bob@example.com",
+		"--phone", "555-1234",
+		"--org", "Acme Corp",
+		"--url", "https://bob.example.com",
+	)
+	if err != nil {
+		t.Fatalf("frm add with flags failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Added contact Bob Smith") {
+		t.Errorf("unexpected output: %s", stdout)
+	}
+
+	// Verify the contact card has the expected fields
+	card := env.getContactCard("Bob Smith")
+	if card == nil {
+		t.Fatal("Bob Smith not found in backend")
+	}
+	if card.PreferredValue(vcard.FieldEmail) != "bob@example.com" {
+		t.Errorf("expected email bob@example.com, got %q", card.PreferredValue(vcard.FieldEmail))
+	}
+	if card.PreferredValue(vcard.FieldTelephone) != "555-1234" {
+		t.Errorf("expected phone 555-1234, got %q", card.PreferredValue(vcard.FieldTelephone))
+	}
+	if card.PreferredValue(vcard.FieldOrganization) != "Acme Corp" {
+		t.Errorf("expected org Acme Corp, got %q", card.PreferredValue(vcard.FieldOrganization))
+	}
+	if card.PreferredValue(vcard.FieldURL) != "https://bob.example.com" {
+		t.Errorf("expected url https://bob.example.com, got %q", card.PreferredValue(vcard.FieldURL))
+	}
+}
+
 func TestE2E_ContextNoEmail(t *testing.T) {
 	messages := map[string][]mockMessage{
 		"alice@example.com": {
