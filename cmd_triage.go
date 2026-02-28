@@ -92,7 +92,10 @@ func init() {
 func runTriage(ctx context.Context, contacts []triageContact, reader *bufio.Reader, w io.Writer, providers []ContextProvider) error {
 	var monthly, quarterly, yearly, skipped, ignored, custom int
 
-	for _, tc := range contacts {
+	for i, tc := range contacts {
+		if i > 0 {
+			fmt.Fprintln(w)
+		}
 		name := contactName(tc.obj)
 		fmt.Fprintf(w, "%s\n", name)
 		// Show extra context so the user can identify who this is
