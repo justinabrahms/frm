@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Getting Started -- frm</title>
+  <meta name="description" content="How to install, configure, and use frm for relationship management.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <nav>
+    <a href="./" class="site-name">frm</a>
+    <a href="guide.html" aria-current="page">Guide</a>
+    <a href="commands.html">Commands</a>
+    <a href="agents.html">Agents</a>
+    <a href="https://github.com/justinabrahms/frm">GitHub</a>
+  </nav>
+</header>
+
+<main class="content">
+  <h1>Getting Started</h1>
+  <p>
+    This guide walks you through installing frm, connecting your address book,
+    and building a daily habit of staying in touch with the people who matter.
+  </p>
+
+  <h2>Installation</h2>
+
+  <p>Install with Go (requires Go 1.21 or later):</p>
+  <pre><code>go install github.com/justinabrahms/frm@latest</code></pre>
+
+  <p>
+    Or download a prebuilt binary from the
+    <a href="https://github.com/justinabrahms/frm/releases">Releases page</a>.
+  </p>
+
+  <p>Verify it works:</p>
+  <pre><code>frm --version</code></pre>
+
+  <h2>Setting up with frm init</h2>
+
+  <p>
+    The <code>frm init</code> wizard walks you through connecting a CardDAV
+    server. It supports iCloud, Fastmail, and custom CardDAV endpoints.
+  </p>
+
+  <pre><code>frm init</code></pre>
+
+  <p>The wizard will prompt you to choose a provider and enter credentials.</p>
+
+  <h3>iCloud</h3>
+  <p>
+    iCloud requires an app-specific password. Generate one at
+    <a href="https://account.apple.com">account.apple.com</a> under
+    Sign-In and Security &rarr; App-Specific Passwords.
+  </p>
+  <p>
+    The endpoint is <code>https://contacts.icloud.com</code> and your username
+    is your iCloud email address.
+  </p>
+
+  <h3>Fastmail</h3>
+  <p>
+    Use <code>https://carddav.fastmail.com</code> as the endpoint with your
+    Fastmail email and an app password.
+  </p>
+
+  <h3>Google Contacts</h3>
+  <p>
+    Use <code>https://www.googleapis.com/.well-known/carddav</code> as the
+    endpoint with your Gmail address and an app password.
+  </p>
+
+  <h3>Custom CardDAV</h3>
+  <p>
+    Choose "Custom URL" during init and provide your CardDAV server's endpoint.
+    Any server that speaks the CardDAV protocol will work.
+  </p>
+
+  <h3>Adding JMAP for email context</h3>
+  <p>
+    After setting up CardDAV, frm will ask if you want to add a JMAP service.
+    JMAP provides email context during triage and in the <code>frm context</code>
+    command, showing recent emails exchanged with each contact.
+  </p>
+
+  <h3>Manual configuration</h3>
+  <p>
+    The config file lives at <code>~/.frm/config.json</code>. You can edit it
+    directly instead of using the wizard. Override the directory with the
+    <code>FRM_CONFIG_DIR</code> environment variable.
+  </p>
+  <pre><code>{
+  "services": [
+    {
+      "type": "carddav",
+      "endpoint": "https://contacts.icloud.com",
+      "username": "you@icloud.com",
+      "password": "xxxx-xxxx-xxxx-xxxx"
+    }
+  ]
+}</code></pre>
+
+  <h3>Multiple accounts</h3>
+  <p>
+    You can configure multiple CardDAV accounts. Run <code>frm init</code> again
+    and choose "add a service" to append another account. All commands will
+    search across every configured account.
+  </p>
+
+  <h2>Your first triage session</h2>
+
+  <p>
+    Once connected, run <code>frm triage</code> to start categorizing your
+    contacts. For each person, frm shows their name, email, organization, and
+    phone number, then asks you to choose a frequency:
+  </p>
+
+  <pre><code>$ frm triage
+Alice Smith
+  alice@example.com
+  Acme Corp
+  [m]onthly  [q]uarterly  [y]early  [s]kip  [i]gnore  or frequency (e.g. 2w)  [Enter=skip]></code></pre>
+
+  <p>Your options:</p>
+  <ul>
+    <li><strong>m</strong> &mdash; monthly (every 30 days)</li>
+    <li><strong>q</strong> &mdash; quarterly (every 90 days)</li>
+    <li><strong>y</strong> &mdash; yearly (every 360 days)</li>
+    <li><strong>s</strong> or Enter &mdash; skip for now (come back later)</li>
+    <li><strong>i</strong> &mdash; ignore permanently (never show again)</li>
+    <li>A custom duration like <strong>2w</strong> (every 2 weeks) or <strong>3d</strong> (every 3 days)</li>
+  </ul>
+
+  <div class="callout">
+    <p>
+      By default, triage shows 5 contacts at a time. Use <code>--limit 20</code>
+      to see more, or <code>--limit -1</code> for all of them.
+    </p>
+  </div>
+
+  <h3>Duration format</h3>
+  <p>frm understands three duration units:</p>
+  <ul>
+    <li><code>3d</code> &mdash; every 3 days</li>
+    <li><code>2w</code> &mdash; every 2 weeks</li>
+    <li><code>1m</code> &mdash; every month (30 days)</li>
+  </ul>
+
+  <h2>Daily workflow with frm check</h2>
+
+  <p>
+    Run <code>frm check</code> to see everyone who is overdue:
+  </p>
+
+  <pre><code>$ frm check
+Overdue contacts:
+  Alice Smith (every 2w, last contact 3w ago)
+  Bob Jones (every 1m, never contacted)</code></pre>
+
+  <p>
+    When you reach out to someone, log the interaction:
+  </p>
+
+  <pre><code>frm log "Alice Smith" --note "caught up over coffee"</code></pre>
+
+  <p>
+    You can backdate interactions with the <code>--when</code> flag:
+  </p>
+
+  <pre><code>frm log "Alice Smith" --when 2026-02-15 --note "ran into her at the conference"</code></pre>
+
+  <h2>Pre-meeting context</h2>
+
+  <p>
+    Before a meeting, run <code>frm context</code> to see a summary of your
+    relationship with someone:
+  </p>
+
+  <pre><code>$ frm context "Alice Smith"
+Name:      Alice Smith
+Group:     friends
+Frequency: every 2w
+Last seen: 2026-02-14 (14 days ago)
+Last note: caught up over coffee
+Due in:    0 days</code></pre>
+
+  <p>
+    If you have JMAP configured, this also shows recent email threads.
+  </p>
+
+  <h2>Logging interactions</h2>
+
+  <p>The <code>frm log</code> command records that you interacted with someone:</p>
+
+  <pre><code># Basic log
+frm log "Alice"
+
+# With a note about what you discussed
+frm log "Alice" --note "discussed the quarterly report"
+
+# Backdated to a specific date
+frm log "Alice" --when 2026-02-01 --note "lunch meeting"</code></pre>
+
+  <p>
+    View someone's interaction history with <code>frm history</code>:
+  </p>
+
+  <pre><code>$ frm history "Alice"
+2026-02-01  lunch meeting
+2026-02-14  caught up over coffee</code></pre>
+
+  <h2>Groups and organization</h2>
+
+  <p>
+    Assign contacts to groups for organization:
+  </p>
+
+  <pre><code># Assign a contact to a group
+frm group set "Alice Smith" friends
+frm group set "Bob Jones" professional
+
+# List all groups
+frm group list
+
+# List contacts in a group
+frm group members friends
+
+# Remove from a group
+frm group unset "Alice Smith"</code></pre>
+
+  <h2>Managing the overdue pile</h2>
+
+  <h3>Snoozing contacts</h3>
+
+  <p>
+    If someone is overdue but you know you will see them soon, snooze them:
+  </p>
+
+  <pre><code># Snooze for 2 months
+frm snooze "Alice" --until 2m
+
+# Snooze until a specific date
+frm snooze "Alice" --until 2026-06-01
+
+# Remove the snooze early
+frm unsnooze "Alice"</code></pre>
+
+  <h3>Spreading new imports</h3>
+
+  <p>
+    After a big import, everyone shows as overdue at once. The <code>spread</code>
+    command staggers snoozes so contacts come due gradually:
+  </p>
+
+  <pre><code># Preview what would happen
+frm spread
+
+# Apply the spread
+frm spread --apply</code></pre>
+
+  <h2>Viewing your dashboard</h2>
+
+  <p>
+    The <code>frm stats</code> command shows an overview of your contact tracking:
+  </p>
+
+  <pre><code>$ frm stats
+Contacts:        142 total
+  Tracked:       45
+  Ignored:       80
+  Untriaged:     17 (12%)
+Overdue:         3
+Interactions:    127
+Most contacted:  Alice Smith (12)
+Least contacted: Zara Jones (1)</code></pre>
+
+  <h2>Next steps</h2>
+  <ul>
+    <li>See the <a href="commands.html">Command Reference</a> for every command and flag.</li>
+    <li>Read the <a href="agents.html">Agent Integration Guide</a> to automate your workflow with AI agents.</li>
+  </ul>
+</main>
+
+<footer class="site-footer">
+  <a href="https://github.com/justinabrahms/frm">frm</a> is open source under the MIT license.
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Command Reference -- frm</title>
+  <meta name="description" content="Complete reference for every frm command, flag, and option.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <nav>
+    <a href="./" class="site-name">frm</a>
+    <a href="guide.html">Guide</a>
+    <a href="commands.html" aria-current="page">Commands</a>
+    <a href="agents.html">Agents</a>
+    <a href="https://github.com/justinabrahms/frm">GitHub</a>
+  </nav>
+</header>
+
+<main class="content">
+  <h1>Command Reference</h1>
+  <p>
+    Every frm command, organized by category. All commands support the global
+    flags <code>--json</code> (structured output) and <code>--dry-run</code>
+    (preview without changes).
+  </p>
+
+  <h2>Global Flags</h2>
+
+  <div class="command-block">
+    <h4>--json</h4>
+    <p class="cmd-desc">Output structured JSON instead of human-readable text. Available on every command.</p>
+  </div>
+
+  <div class="command-block">
+    <h4>--dry-run</h4>
+    <p class="cmd-desc">Show what would happen without making any changes. Writes include a <code>"dry_run": true</code> field in JSON mode.</p>
+  </div>
+
+  <div class="command-block">
+    <h4>--version</h4>
+    <p class="cmd-desc">Print the frm version and exit.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>Setup</h2>
+
+  <div class="command-block">
+    <h4>frm init</h4>
+    <p class="cmd-desc">
+      Interactive setup wizard. Walks you through connecting a CardDAV server
+      (iCloud, Fastmail, or custom) and optionally a JMAP provider for email
+      context. Creates <code>~/.frm/config.json</code>.
+    </p>
+    <pre><code>frm init</code></pre>
+    <p class="cmd-desc">
+      If a config already exists, you can choose to overwrite it or add another
+      service. Validates the connection before saving.
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>Daily Use</h2>
+
+  <div class="command-block">
+    <h4>frm check</h4>
+    <p class="cmd-desc">
+      Show contacts that are overdue for a catch-up. A contact is overdue when
+      the time since your last interaction exceeds its tracking frequency.
+      Ignores snoozed and ignored contacts.
+    </p>
+    <pre><code># See who needs attention
+frm check
+
+# Machine-readable output (includes email, phone, org, group, last note)
+frm check --json</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm list</h4>
+    <p class="cmd-desc">
+      List tracked contacts with their frequency, group, and due dates.
+    </p>
+    <ul class="flags">
+      <li><code>--all</code> &mdash; include untracked and ignored contacts</li>
+    </ul>
+    <pre><code># Tracked contacts only
+frm list
+
+# Everyone
+frm list --all</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm log &lt;name&gt;</h4>
+    <p class="cmd-desc">
+      Record an interaction with a contact. Resets their overdue timer.
+    </p>
+    <ul class="flags">
+      <li><code>--note &lt;text&gt;</code> &mdash; note about the interaction</li>
+      <li><code>--when &lt;date&gt;</code> &mdash; backdate to YYYY-MM-DD instead of now</li>
+    </ul>
+    <pre><code>frm log "Alice" --note "caught up over coffee"
+frm log "Alice" --when 2026-02-15 --note "ran into her at the conference"</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm context &lt;name&gt;</h4>
+    <p class="cmd-desc">
+      Pre-meeting prep. Shows a contact's name, group, frequency, last
+      interaction, and days until due. If JMAP is configured, includes
+      recent email threads. Aliases: <code>show</code>, <code>detail</code>.
+    </p>
+    <pre><code>frm context "Alice Smith"
+frm context "Alice Smith" --json</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm history &lt;name&gt;</h4>
+    <p class="cmd-desc">
+      Show the interaction log for a specific contact. Displays dates and notes
+      in chronological order.
+    </p>
+    <pre><code>frm history "Alice Smith"</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm stats</h4>
+    <p class="cmd-desc">
+      Dashboard showing totals for contacts (tracked, ignored, untriaged),
+      overdue count, total interactions, and most/least contacted people.
+    </p>
+    <pre><code>frm stats
+frm stats --json</code></pre>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>Contact Management</h2>
+
+  <div class="command-block">
+    <h4>frm triage</h4>
+    <p class="cmd-desc">
+      Interactive loop through contacts that have no frequency and are not
+      ignored. Shows name, email, org, phone, and email context (if JMAP is
+      configured), then prompts for a frequency.
+    </p>
+    <ul class="flags">
+      <li><code>--limit &lt;n&gt;</code> &mdash; max contacts to show (default 5, use -1 for all)</li>
+    </ul>
+    <pre><code># Interactive mode
+frm triage
+frm triage --limit 20
+
+# JSON mode for agents (no prompts)
+frm triage --json --limit -1</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm track &lt;name&gt; --every &lt;freq&gt;</h4>
+    <p class="cmd-desc">
+      Set the tracking frequency for a contact. The <code>--every</code> flag
+      is required.
+    </p>
+    <ul class="flags">
+      <li><code>--every &lt;freq&gt;</code> &mdash; frequency string: <code>3d</code>, <code>2w</code>, <code>1m</code>, etc.</li>
+    </ul>
+    <pre><code>frm track "Alice" --every 2w
+frm track "Bob" --every 1m</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm untrack &lt;name&gt;</h4>
+    <p class="cmd-desc">
+      Remove the tracking frequency from a contact. They will no longer appear
+      in <code>frm check</code>.
+    </p>
+    <pre><code>frm untrack "Alice"</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm ignore &lt;name&gt;</h4>
+    <p class="cmd-desc">
+      Permanently hide a contact from triage and check. Skips contacts that are
+      already ignored.
+    </p>
+    <pre><code>frm ignore "Spam Contact"</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm unignore &lt;name&gt;</h4>
+    <p class="cmd-desc">
+      Reverse an ignore, making the contact visible in triage and check again.
+    </p>
+    <pre><code>frm unignore "Alice"</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm snooze &lt;name&gt; --until &lt;date&gt;</h4>
+    <p class="cmd-desc">
+      Temporarily suppress a contact from check until a given date. Accepts an
+      absolute date or a relative duration.
+    </p>
+    <ul class="flags">
+      <li><code>--until &lt;date|duration&gt;</code> &mdash; e.g. <code>2026-06-01</code> or <code>2m</code></li>
+    </ul>
+    <pre><code>frm snooze "Alice" --until 2m
+frm snooze "Alice" --until 2026-06-01</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm unsnooze &lt;name&gt;</h4>
+    <p class="cmd-desc">
+      Remove the snooze from a contact so they appear in check immediately.
+    </p>
+    <pre><code>frm unsnooze "Alice"</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm add &lt;name&gt;</h4>
+    <p class="cmd-desc">
+      Create a new contact in the first configured CardDAV account.
+    </p>
+    <ul class="flags">
+      <li><code>--email &lt;addr&gt;</code> &mdash; email address</li>
+      <li><code>--phone &lt;num&gt;</code> &mdash; phone number</li>
+      <li><code>--org &lt;name&gt;</code> &mdash; organization</li>
+      <li><code>--url &lt;url&gt;</code> &mdash; website or social URL</li>
+    </ul>
+    <pre><code>frm add "Jane Doe" --email jane@example.com --org "Acme Corp"</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm edit &lt;name&gt;</h4>
+    <p class="cmd-desc">
+      Update fields on an existing contact. At least one flag must be provided.
+    </p>
+    <ul class="flags">
+      <li><code>--email &lt;addr&gt;</code> &mdash; email address</li>
+      <li><code>--phone &lt;num&gt;</code> &mdash; phone number</li>
+      <li><code>--org &lt;name&gt;</code> &mdash; organization</li>
+      <li><code>--url &lt;url&gt;</code> &mdash; website or social URL</li>
+    </ul>
+    <pre><code>frm edit "Jane Doe" --phone "+1-555-0100" --org "New Company"</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm spread</h4>
+    <p class="cmd-desc">
+      After a big import, all tracked contacts show as overdue at once. This
+      command randomly staggers snoozes across each contact's frequency interval,
+      so they come due gradually instead of all at once. Only affects tracked
+      contacts that have never been contacted.
+    </p>
+    <ul class="flags">
+      <li><code>--apply</code> &mdash; actually apply the snoozes (default is a preview)</li>
+    </ul>
+    <pre><code># Preview
+frm spread
+
+# Apply
+frm spread --apply</code></pre>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>Groups</h2>
+
+  <div class="command-block">
+    <h4>frm group set &lt;name&gt; &lt;group&gt;</h4>
+    <p class="cmd-desc">
+      Assign a contact to a group. Groups are freeform strings &mdash; use
+      whatever names make sense to you.
+    </p>
+    <pre><code>frm group set "Alice" friends
+frm group set "Bob" professional</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm group unset &lt;name&gt;</h4>
+    <p class="cmd-desc">Remove a contact from its group.</p>
+    <pre><code>frm group unset "Alice"</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm group list</h4>
+    <p class="cmd-desc">List all groups with their contact counts.</p>
+    <pre><code>frm group list</code></pre>
+  </div>
+
+  <div class="command-block">
+    <h4>frm group members &lt;group&gt;</h4>
+    <p class="cmd-desc">List all contacts in a specific group.</p>
+    <pre><code>frm group members friends</code></pre>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>Duration Format</h2>
+
+  <p>Anywhere frm accepts a duration, you can use:</p>
+  <ul>
+    <li><code>3d</code> &mdash; 3 days</li>
+    <li><code>2w</code> &mdash; 2 weeks (14 days)</li>
+    <li><code>1m</code> &mdash; 1 month (30 days)</li>
+  </ul>
+  <p>
+    Combine the number with the unit. Examples: <code>1d</code>, <code>2w</code>,
+    <code>3m</code>, <code>6m</code>, <code>12m</code>.
+  </p>
+</main>
+
+<footer class="site-footer">
+  <a href="https://github.com/justinabrahms/frm">frm</a> is open source under the MIT license.
+</footer>
+
+</body>
+</html>

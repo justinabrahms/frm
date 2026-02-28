@@ -1,8 +1,10 @@
 # frm
 
-A CLI personal CRM backed by CardDAV. Single binary, no database — your contacts live in your existing address book, interaction history in a local JSONL file.
+**Maintain meaningful relationships** -- a CLI personal CRM backed by CardDAV.
 
-Built to be driven by AI agents. Your agent checks who you're overdue to reach out to, prepares context before meetings, and prompts you to stay in touch with the people who matter.
+Single binary, no database -- your contacts live in your existing address book, interaction history in a local JSONL file. Built to be driven by AI agents.
+
+**[Read the docs](https://justinabrahms.github.io/frm/)** | [Getting Started](https://justinabrahms.github.io/frm/guide.html) | [Command Reference](https://justinabrahms.github.io/frm/commands.html) | [Agent Integration](https://justinabrahms.github.io/frm/agents.html)
 
 ![frm demo](demo.gif)
 
@@ -16,16 +18,14 @@ go install github.com/justinabrahms/frm@latest
 
 ## Quick start
 
-1. Create `~/.frm/config.json` with your CardDAV credentials (see [Setup](#setup) below)
+1. `frm init` to connect your CardDAV server (iCloud, Fastmail, or custom)
 2. `frm triage` to categorize your contacts
 3. `frm check` to see who you're overdue to reach out to
 4. `frm log "Alice" --note "caught up over coffee"` after you talk to someone
 
 ## Agent integration
 
-frm is designed for AI agents to drive your relationship maintenance. Every command supports `--json` for structured output.
-
-The typical agent loop:
+frm is designed for AI agents to drive your relationship maintenance. Every command supports `--json` for structured output and `--dry-run` for safe previews.
 
 ```bash
 # 1. Who needs attention?
@@ -42,18 +42,17 @@ frm triage --json --limit -1
 # then for each: frm track "<name>" --every 2w  OR  frm ignore "<name>"
 ```
 
-See [SKILL.md](SKILL.md) for a complete agent skill reference.
+See the [Agent Integration Guide](https://justinabrahms.github.io/frm/agents.html) and [SKILL.md](SKILL.md) for a complete reference.
 
 ## Usage
 
 ```
-frm contacts                       List all contacts
 frm list                           List tracked contacts with due dates
 frm list --all                     Include untracked contacts
 frm check                          Show overdue contacts
 frm context "Alice"                Pre-meeting prep: summary + recent emails
 frm log "Alice" --note "coffee"    Log an interaction
-frm log "Alice" --when -2w         Backdate an interaction
+frm log "Alice" --when 2026-02-15  Backdate an interaction
 frm triage                         Walk through untagged contacts interactively
 frm triage --json                  List untriaged contacts as JSON (for agents)
 frm track "Alice" --every 2w       Track Alice every 2 weeks
@@ -64,40 +63,27 @@ frm snooze "Alice" --until 2m      Temporarily suppress from check
 frm unsnooze "Alice"               Remove a snooze
 frm spread                         Preview staggered snoozes for new imports
 frm spread --apply                 Apply the spread
+frm add "Alice" --email a@b.com    Create a new contact
+frm edit "Alice" --phone "555"     Update contact fields
 frm history "Alice"                Show interaction log
 frm stats                          Dashboard
 frm group set "Alice" friends      Assign to a group
 frm group unset "Alice"            Remove from group
 frm group list                     List all groups
-frm group list friends             List contacts in a group
+frm group members friends          List contacts in a group
 ```
 
-All listing commands support `--json` for machine-readable output.
+All commands support `--json` for machine-readable output and `--dry-run` for previewing changes.
 
 ### Duration format
 
-- `3d` — every 3 days
-- `2w` — every 2 weeks
-- `1m` — every month (30 days)
-
-### Triage
-
-`frm triage` loops through contacts that have no frequency set and aren't ignored. For each one it shows email, org, phone, and recent email context (if JMAP is configured), then prompts:
-
-```
-Alice Smith
-  alice@example.com
-  Acme Corp
-Recent emails:
-  Weekend plans? (2024-01-15)
-  [m]onthly  [q]uarterly  [y]early  [s]kip  [i]gnore  [Enter=skip]>
-```
-
-`frm triage --json` skips the interactive loop and outputs untriaged contacts as a JSON array. An agent can read this, call `frm track` or `frm ignore` for each contact, then repeat until the list is empty.
+- `3d` -- every 3 days
+- `2w` -- every 2 weeks
+- `1m` -- every month (30 days)
 
 ## Setup
 
-Create `~/.frm/config.json` with at least one CardDAV service.
+Create `~/.frm/config.json` with at least one CardDAV service, or run `frm init` for the interactive wizard.
 
 ### iCloud
 
@@ -168,12 +154,12 @@ You can override the config directory with `FRM_CONFIG_DIR`.
 
 Contacts and metadata live in your CardDAV server via custom vCard fields:
 
-- `X-FRM-FREQUENCY` — tracking interval (e.g. `2w`, `1m`)
-- `X-FRM-IGNORE` — `"true"` to permanently hide
-- `X-FRM-GROUP` — freeform group tag
-- `X-FRM-SNOOZE-UNTIL` — date to suppress until
+- `X-FRM-FREQUENCY` -- tracking interval (e.g. `2w`, `1m`)
+- `X-FRM-IGNORE` -- `"true"` to permanently hide
+- `X-FRM-GROUP` -- freeform group tag
+- `X-FRM-SNOOZE-UNTIL` -- date to suppress until
 
-Interaction history is stored locally in `~/.frm/log.jsonl`. This is the only local state — back it up or symlink it to a synced directory.
+Interaction history is stored locally in `~/.frm/log.jsonl`. This is the only local state -- back it up or symlink it to a synced directory.
 
 ## License
 

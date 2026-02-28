@@ -43,14 +43,36 @@ func init() {
 				}
 			}
 
-			if err := appendLog(entry); err != nil {
-				return err
+			dryRun := isDryRun(cmd)
+
+			if !dryRun {
+				if err := appendLog(entry); err != nil {
+					return err
+				}
 			}
-			fmt.Printf("Logged interaction with %s\n", entry.Contact)
+
+			if isJSONMode(cmd) {
+				out := map[string]interface{}{
+					"action":  "log",
+					"contact": entry.Contact,
+					"time":    entry.Time.Format(time.RFC3339),
+					"note":    entry.Note,
+				}
+				if dryRun {
+					out["dry_run"] = true
+				}
+				return printJSON(cmd, out)
+			}
+
+			if dryRun {
+				fmt.Printf("Would log interaction with %s (dry run)\n", entry.Contact)
+			} else {
+				fmt.Printf("Logged interaction with %s\n", entry.Contact)
+			}
 			return nil
 		},
 	}
 	logCmd.Flags().String("note", "", "Note about the interaction")
-	logCmd.Flags().String("when", "", "When it happened (e.g. 2024-01-15 or -2w)")
+	logCmd.Flags().String("when", "", "When it happened (YYYY-MM-DD, e.g. 2024-01-15)")
 	rootCmd.AddCommand(logCmd)
 }

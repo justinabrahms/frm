@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Integration -- frm</title>
+  <meta name="description" content="How to integrate frm with AI agents for automated relationship management.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <nav>
+    <a href="./" class="site-name">frm</a>
+    <a href="guide.html">Guide</a>
+    <a href="commands.html">Commands</a>
+    <a href="agents.html" aria-current="page">Agents</a>
+    <a href="https://github.com/justinabrahms/frm">GitHub</a>
+  </nav>
+</header>
+
+<main class="content">
+  <h1>Agent Integration Guide</h1>
+  <p>
+    frm is designed to be driven by AI agents. Every command supports
+    <code>--json</code> for structured output and <code>--dry-run</code> for
+    safe previews. This guide covers the patterns and workflows that make
+    agent integration straightforward.
+  </p>
+
+  <h2>The --json flag</h2>
+
+  <p>
+    The <code>--json</code> flag is a persistent root flag, meaning it works on
+    every command. When set, commands output structured JSON to stdout instead of
+    human-readable text.
+  </p>
+
+  <h3>Read commands</h3>
+  <p>
+    Commands that list data return JSON arrays or objects:
+  </p>
+
+  <pre><code>$ frm check --json
+[
+  {
+    "name": "Alice Smith",
+    "frequency": "2w",
+    "last_seen": "2026-02-01",
+    "ago": "3w",
+    "email": "alice@example.com",
+    "org": "Acme Corp",
+    "group": "friends",
+    "last_note": "caught up over coffee"
+  }
+]</code></pre>
+
+  <pre><code>$ frm context "Alice Smith" --json
+{
+  "name": "Alice Smith",
+  "frequency": "2w",
+  "group": "friends",
+  "ignored": false,
+  "last_contact": "2026-02-01T00:00:00Z",
+  "last_note": "caught up over coffee",
+  "days_since": 27,
+  "days_until_due": -13
+}</code></pre>
+
+  <pre><code>$ frm stats --json
+{
+  "total_contacts": 142,
+  "tracked": 45,
+  "ignored": 80,
+  "untriaged": 17,
+  "coverage_pct": 88.03,
+  "overdue": 3,
+  "total_interactions": 127,
+  "most_contacted": "Alice Smith",
+  "least_contacted": "Zara Jones"
+}</code></pre>
+
+  <h3>Write commands</h3>
+  <p>
+    Commands that modify data return a confirmation object:
+  </p>
+
+  <pre><code>$ frm track "Alice" --every 2w --json
+{
+  "action": "track",
+  "name": "Alice Smith",
+  "frequency": "2w",
+  "accounts": 1
+}
+
+$ frm log "Alice" --note "had coffee" --json
+{
+  "action": "log",
+  "contact": "Alice Smith",
+  "time": "2026-02-28T12:00:00Z",
+  "note": "had coffee"
+}
+
+$ frm ignore "Spam Contact" --json
+{
+  "action": "ignore",
+  "name": "Spam Contact",
+  "accounts": 1,
+  "skipped": 0
+}</code></pre>
+
+  <h2>The --dry-run flag</h2>
+
+  <p>
+    The <code>--dry-run</code> flag prevents any writes. Combined with
+    <code>--json</code>, the output includes <code>"dry_run": true</code>
+    so your agent can confirm intent before committing:
+  </p>
+
+  <pre><code>$ frm track "Alice" --every 2w --json --dry-run
+{
+  "action": "track",
+  "name": "Alice Smith",
+  "frequency": "2w",
+  "accounts": 1,
+  "dry_run": true
+}</code></pre>
+
+  <div class="callout">
+    <p>
+      Use <code>--dry-run</code> during development and testing to avoid
+      accidentally modifying contacts. Your agent can do a dry-run pass first,
+      present the plan, then re-run without the flag to apply changes.
+    </p>
+  </div>
+
+  <h2>Structured JSON errors</h2>
+
+  <p>
+    When <code>--json</code> is set and a command fails, frm outputs a
+    structured error to stdout (not stderr) so JSON parsers can handle it:
+  </p>
+
+  <pre><code>$ frm track "Nonexistent Person" --every 2w --json
+{
+  "error": "contact \"Nonexistent Person\" not found"
+}</code></pre>
+
+  <p>
+    The exit code is still non-zero on failure, so your agent can check both
+    the exit code and the JSON body.
+  </p>
+
+  <h2>The triage loop</h2>
+
+  <p>
+    The core agent workflow is the triage loop. The idea is simple: ask frm for
+    untriaged contacts, decide what to do with each one, then repeat until the
+    list is empty.
+  </p>
+
+  <h3>Step 1: Get untriaged contacts</h3>
+
+  <pre><code>$ frm triage --json --limit -1
+[
+  {
+    "name": "Alice Smith",
+    "email": "alice@example.com",
+    "org": "Acme Corp"
+  },
+  {
+    "name": "Bob Jones",
+    "email": "bob@example.com",
+    "phone": "+1-555-0100"
+  }
+]</code></pre>
+
+  <p>
+    The list only includes contacts that have no frequency set and are not
+    ignored. The <code>--limit -1</code> flag returns all of them.
+  </p>
+
+  <h3>Step 2: Categorize each contact</h3>
+
+  <p>For each contact, run one of:</p>
+
+  <pre><code># Set a tracking frequency
+frm track "Alice Smith" --every 2w --json
+
+# Or ignore them permanently
+frm ignore "Bob Jones" --json</code></pre>
+
+  <h3>Step 3: Repeat</h3>
+
+  <p>
+    Call <code>frm triage --json</code> again. Contacts you just tracked or
+    ignored will no longer appear. Repeat until the list is empty.
+  </p>
+
+  <h3>Complete triage script</h3>
+
+  <p>Here is a shell script that demonstrates the loop:</p>
+
+  <pre><code>#!/bin/bash
+# Example: triage all contacts using an LLM to decide frequencies.
+# Replace the "decide" function with your actual LLM call.
+
+decide() {
+  local name="$1" email="$2" org="$3"
+  # Your LLM logic here. Return a frequency string or "ignore".
+  echo "1m"
+}
+
+while true; do
+  contacts=$(frm triage --json --limit 20)
+  count=$(echo "$contacts" | jq 'length')
+
+  if [ "$count" -eq 0 ]; then
+    echo "All contacts triaged."
+    break
+  fi
+
+  echo "$contacts" | jq -c '.[]' | while read -r contact; do
+    name=$(echo "$contact" | jq -r '.name')
+    email=$(echo "$contact" | jq -r '.email // empty')
+    org=$(echo "$contact" | jq -r '.org // empty')
+
+    result=$(decide "$name" "$email" "$org")
+
+    if [ "$result" = "ignore" ]; then
+      frm ignore "$name" --json
+    else
+      frm track "$name" --every "$result" --json
+    fi
+  done
+done</code></pre>
+
+  <h2>The daily check workflow</h2>
+
+  <p>
+    Beyond triage, an agent can run your daily check and prepare context:
+  </p>
+
+  <pre><code>#!/bin/bash
+# Daily workflow: check overdue contacts and prepare context for each.
+
+overdue=$(frm check --json)
+count=$(echo "$overdue" | jq 'length')
+
+if [ "$count" -eq 0 ]; then
+  echo "All caught up!"
+  exit 0
+fi
+
+echo "$overdue" | jq -c '.[]' | while read -r contact; do
+  name=$(echo "$contact" | jq -r '.name')
+  freq=$(echo "$contact" | jq -r '.frequency')
+  ago=$(echo "$contact" | jq -r '.ago // "never"')
+  note=$(echo "$contact" | jq -r '.last_note // "no notes"')
+
+  echo "--- $name (every $freq, last: $ago) ---"
+  echo "Last note: $note"
+
+  # Get full context including email threads
+  frm context "$name" --json | jq '.providers // empty'
+  echo ""
+done</code></pre>
+
+  <h2>Adding and editing contacts</h2>
+
+  <p>
+    Agents can create new contacts and update existing ones:
+  </p>
+
+  <pre><code># Add a new contact
+frm add "Jane Doe" --email jane@example.com --org "Startup Inc" --json
+
+# Update an existing contact
+frm edit "Jane Doe" --phone "+1-555-0200" --json
+
+# Group them
+frm group set "Jane Doe" professional --json</code></pre>
+
+  <h2>Managing overdue contacts</h2>
+
+  <p>
+    Agents can snooze contacts and use spread to manage imports:
+  </p>
+
+  <pre><code># Snooze someone for 2 months
+frm snooze "Alice" --until 2m --json
+
+# After a big import, spread contacts across their intervals
+frm spread               # preview
+frm spread --apply       # execute</code></pre>
+
+  <h2>Summary of useful commands for agents</h2>
+
+  <table style="width:100%; font-size:0.9rem; border-collapse:collapse; margin:1rem 0;">
+    <thead>
+      <tr style="border-bottom:2px solid #e0e4ea; text-align:left;">
+        <th style="padding:0.5rem 0.75rem;">Command</th>
+        <th style="padding:0.5rem 0.75rem;">Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:0.4rem 0.75rem;"><code>frm triage --json</code></td>
+        <td style="padding:0.4rem 0.75rem;">Get untriaged contacts</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:0.4rem 0.75rem;"><code>frm check --json</code></td>
+        <td style="padding:0.4rem 0.75rem;">Get overdue contacts</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:0.4rem 0.75rem;"><code>frm context &lt;name&gt; --json</code></td>
+        <td style="padding:0.4rem 0.75rem;">Get full context for a contact</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:0.4rem 0.75rem;"><code>frm track &lt;name&gt; --every &lt;freq&gt; --json</code></td>
+        <td style="padding:0.4rem 0.75rem;">Set tracking frequency</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:0.4rem 0.75rem;"><code>frm ignore &lt;name&gt; --json</code></td>
+        <td style="padding:0.4rem 0.75rem;">Permanently hide a contact</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:0.4rem 0.75rem;"><code>frm log &lt;name&gt; --note &lt;text&gt; --json</code></td>
+        <td style="padding:0.4rem 0.75rem;">Record an interaction</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:0.4rem 0.75rem;"><code>frm stats --json</code></td>
+        <td style="padding:0.4rem 0.75rem;">Get tracking dashboard data</td>
+      </tr>
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:0.4rem 0.75rem;"><code>frm add &lt;name&gt; --json</code></td>
+        <td style="padding:0.4rem 0.75rem;">Create a new contact</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.75rem;"><code>frm edit &lt;name&gt; --json</code></td>
+        <td style="padding:0.4rem 0.75rem;">Update contact fields</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <p>
+      All write commands support <code>--dry-run</code> for safe previews.
+      Use this during development to test your agent logic without modifying
+      real contacts.
+    </p>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <a href="https://github.com/justinabrahms/frm">frm</a> is open source under the MIT license.
+</footer>
+
+</body>
+</html>

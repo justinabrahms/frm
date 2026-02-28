@@ -3,48 +3,39 @@ package main
 import (
 	"fmt"
 	"os"
-	"sort"
 
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "contacts",
-		Short: "List contacts from CardDAV",
+	contactsCmd := &cobra.Command{
+		Use:    "contacts",
+		Short:  "Deprecated: use 'frm list --all' instead",
+		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := loadConfig()
+			fmt.Fprintln(os.Stderr, "Warning: 'frm contacts' is deprecated, use 'frm list --all' instead.")
+
+			// Find the list command and invoke it with --all
+			listCmd, _, err := rootCmd.Find([]string{"list"})
 			if err != nil {
-				return err
-			}
-			results, err := allContactsMulti(cfg)
-			if err != nil {
-				return err
+				return fmt.Errorf("finding list command: %w", err)
 			}
 
-			var names []string
-			for _, r := range results {
-				for _, obj := range r.objs {
-					name := contactName(obj)
-					if name != "" {
-						names = append(names, name)
-					}
-				}
+			// Set the --all flag on the list command
+			if err := listCmd.Flags().Set("all", "true"); err != nil {
+				return fmt.Errorf("setting --all flag: %w", err)
 			}
-			sort.Strings(names)
 
+			// Forward the --json flag if set
 			jsonFlag, _ := cmd.Flags().GetBool("json")
 			if jsonFlag {
-				return printJSON(cmd, names)
+				if err := listCmd.Flags().Set("json", "true"); err != nil {
+					return fmt.Errorf("setting --json flag: %w", err)
+				}
 			}
 
-			for _, name := range names {
-				fmt.Println(name)
-			}
-			if len(names) == 0 {
-				fmt.Fprintln(os.Stderr, "No contacts found.")
-			}
-			return nil
+			return listCmd.RunE(listCmd, args)
 		},
-	})
+	}
+	rootCmd.AddCommand(contactsCmd)
 }

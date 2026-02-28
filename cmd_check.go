@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emersion/go-vcard"
 	"github.com/spf13/cobra"
 )
 
@@ -13,6 +14,11 @@ type overdueContact struct {
 	Frequency string `json:"frequency"`
 	LastSeen  string `json:"last_seen,omitempty"`
 	Ago       string `json:"ago,omitempty"`
+	Email     string `json:"email,omitempty"`
+	Phone     string `json:"phone,omitempty"`
+	Org       string `json:"org,omitempty"`
+	Group     string `json:"group,omitempty"`
+	LastNote  string `json:"last_note,omitempty"`
 }
 
 func init() {
@@ -34,6 +40,25 @@ func init() {
 				return err
 			}
 			lastContact := lastContactTime(entries)
+
+			jsonFlag, _ := cmd.Flags().GetBool("json")
+
+			// For JSON output, build an index of last log entry per contact
+			// (by path and name) so we can include last_note.
+			lastEntry := make(map[string]*LogEntry)
+			if jsonFlag {
+				for i := range entries {
+					e := &entries[i]
+					if e.Path != "" {
+						if prev, ok := lastEntry[e.Path]; !ok || e.Time.After(prev.Time) {
+							lastEntry[e.Path] = e
+						}
+					}
+					if prev, ok := lastEntry[e.Contact]; !ok || e.Time.After(prev.Time) {
+						lastEntry[e.Contact] = e
+					}
+				}
+			}
 
 			now := time.Now()
 			var overdue []overdueContact
@@ -57,25 +82,50 @@ func init() {
 					if !ok {
 						last, ok = lastContact[name]
 					}
-					if !ok {
-						overdue = append(overdue, overdueContact{
-							Name:      name,
-							Frequency: freq,
-						})
+
+					isOverdue := !ok || now.Sub(last) > dur
+
+					if !isOverdue {
 						continue
 					}
-					if now.Sub(last) > dur {
-						overdue = append(overdue, overdueContact{
-							Name:      name,
-							Frequency: freq,
-							LastSeen:  last.Format("2006-01-02"),
-							Ago:       formatAgo(now.Sub(last)),
-						})
+
+					oc := overdueContact{
+						Name:      name,
+						Frequency: freq,
 					}
+					if ok {
+						oc.LastSeen = last.Format("2006-01-02")
+						oc.Ago = formatAgo(now.Sub(last))
+					}
+
+					// Enrich with contact details for JSON consumers
+					if jsonFlag {
+						if email := obj.Card.PreferredValue(vcard.FieldEmail); email != "" {
+							oc.Email = email
+						}
+						if phone := obj.Card.PreferredValue(vcard.FieldTelephone); phone != "" {
+							oc.Phone = phone
+						}
+						if org := strings.TrimRight(obj.Card.PreferredValue(vcard.FieldOrganization), "; "); org != "" {
+							oc.Org = org
+						}
+						if group := getGroup(obj.Card); group != "" {
+							oc.Group = group
+						}
+						// Find last note from log entries
+						le := lastEntry[obj.Path]
+						if le == nil {
+							le = lastEntry[name]
+						}
+						if le != nil && le.Note != "" {
+							oc.LastNote = le.Note
+						}
+					}
+
+					overdue = append(overdue, oc)
 				}
 			}
 
-			jsonFlag, _ := cmd.Flags().GetBool("json")
 			if jsonFlag {
 				return printJSON(cmd, overdue)
 			}

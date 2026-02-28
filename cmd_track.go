@@ -30,16 +30,35 @@ func init() {
 				return err
 			}
 
-			ctx := context.Background()
-			for _, m := range matches {
-				setFrequency(m.obj.Card, every)
-				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
-					return fmt.Errorf("updating contact: %w", err)
+			name := contactName(*matches[0].obj)
+			dryRun := isDryRun(cmd)
+
+			if !dryRun {
+				ctx := context.Background()
+				for _, m := range matches {
+					setFrequency(m.obj.Card, every)
+					if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+						return fmt.Errorf("updating contact: %w", err)
+					}
 				}
 			}
 
-			name := contactName(*matches[0].obj)
-			if len(matches) > 1 {
+			if isJSONMode(cmd) {
+				out := map[string]interface{}{
+					"action":    "track",
+					"name":      name,
+					"frequency": every,
+					"accounts":  len(matches),
+				}
+				if dryRun {
+					out["dry_run"] = true
+				}
+				return printJSON(cmd, out)
+			}
+
+			if dryRun {
+				fmt.Printf("Would track %s every %s (dry run)\n", name, every)
+			} else if len(matches) > 1 {
 				fmt.Printf("Tracking %s every %s (%d accounts)\n", name, every, len(matches))
 			} else {
 				fmt.Printf("Tracking %s every %s\n", name, every)
@@ -63,16 +82,34 @@ func init() {
 				return err
 			}
 
-			ctx := context.Background()
-			for _, m := range matches {
-				removeFrequency(m.obj.Card)
-				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
-					return fmt.Errorf("updating contact: %w", err)
+			name := contactName(*matches[0].obj)
+			dryRun := isDryRun(cmd)
+
+			if !dryRun {
+				ctx := context.Background()
+				for _, m := range matches {
+					removeFrequency(m.obj.Card)
+					if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+						return fmt.Errorf("updating contact: %w", err)
+					}
 				}
 			}
 
-			name := contactName(*matches[0].obj)
-			if len(matches) > 1 {
+			if isJSONMode(cmd) {
+				out := map[string]interface{}{
+					"action":   "untrack",
+					"name":     name,
+					"accounts": len(matches),
+				}
+				if dryRun {
+					out["dry_run"] = true
+				}
+				return printJSON(cmd, out)
+			}
+
+			if dryRun {
+				fmt.Printf("Would stop tracking %s (dry run)\n", name)
+			} else if len(matches) > 1 {
 				fmt.Printf("Stopped tracking %s (%d accounts)\n", name, len(matches))
 			} else {
 				fmt.Printf("Stopped tracking %s\n", name)

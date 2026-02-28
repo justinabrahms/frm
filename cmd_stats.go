@@ -66,13 +66,20 @@ func init() {
 				contactCounts[e.Contact]++
 			}
 
+			untriaged := totalContacts - tracked - ignoredCount
+			var coveragePct float64
+			if totalContacts > 0 {
+				coveragePct = float64(tracked+ignoredCount) / float64(totalContacts) * 100
+			}
+
 			jsonFlag, _ := cmd.Flags().GetBool("json")
 			if jsonFlag {
 				result := map[string]any{
 					"total_contacts":     totalContacts,
 					"tracked":            tracked,
 					"ignored":            ignoredCount,
-					"untracked":          totalContacts - tracked - ignoredCount,
+					"untriaged":          untriaged,
+					"coverage_pct":       coveragePct,
 					"overdue":            overdueCount,
 					"total_interactions": len(entries),
 				}
@@ -84,10 +91,10 @@ func init() {
 				return printJSON(cmd, result)
 			}
 
-			fmt.Printf("Total contacts:  %d\n", totalContacts)
-			fmt.Printf("Tracked:         %d\n", tracked)
-			fmt.Printf("Ignored:         %d\n", ignoredCount)
-			fmt.Printf("Untracked:       %d\n", totalContacts-tracked-ignoredCount)
+			fmt.Printf("Contacts:        %d total\n", totalContacts)
+			fmt.Printf("  Tracked:       %d\n", tracked)
+			fmt.Printf("  Ignored:       %d\n", ignoredCount)
+			fmt.Printf("  Untriaged:     %d (%.0f%%)\n", untriaged, 100-coveragePct)
 			fmt.Printf("Overdue:         %d\n", overdueCount)
 			fmt.Printf("Interactions:    %d\n", len(entries))
 

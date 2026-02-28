@@ -24,6 +24,9 @@ get a steady trickle instead of a wall of overdue contacts.
 Only affects tracked contacts that have never been contacted.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apply, _ := cmd.Flags().GetBool("apply")
+			if isDryRun(cmd) {
+				apply = false
+			}
 
 			cfg, err := loadConfig()
 			if err != nil {

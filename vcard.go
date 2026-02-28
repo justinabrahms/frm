@@ -115,20 +115,12 @@ func isSnoozed(card vcard.Card) bool {
 	return time.Now().Before(t)
 }
 
-// parseWhen parses a time string that is either an absolute date (2024-01-15)
-// or a relative duration with leading minus (-2w, -3d, -1m).
+// parseWhen parses an absolute date string in YYYY-MM-DD format.
 func parseWhen(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "-") {
-		dur, err := parseDuration(s[1:])
-		if err != nil {
-			return time.Time{}, fmt.Errorf("invalid relative time %q: %w", s, err)
-		}
-		return time.Now().UTC().Add(-dur), nil
-	}
 	t, err := time.Parse("2006-01-02", s)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid date %q: use YYYY-MM-DD or relative like -2w", s)
+		return time.Time{}, fmt.Errorf("invalid date %q: use YYYY-MM-DD format", s)
 	}
 	return t.UTC(), nil
 }

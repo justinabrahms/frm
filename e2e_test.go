@@ -43,7 +43,7 @@ func (b *memBackend) seedContact(name, freq string) {
 	b.seedContactWithEmail(name, freq, "")
 }
 
-func (b *memBackend) seedContactWithEmail(name, freq, email string) {
+func (b *memBackend) seedContactFull(name, freq, email, phone, org string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	card := vcard.Card{
@@ -56,6 +56,12 @@ func (b *memBackend) seedContactWithEmail(name, freq, email string) {
 	if email != "" {
 		card[vcard.FieldEmail] = []*vcard.Field{{Value: email}}
 	}
+	if phone != "" {
+		card[vcard.FieldTelephone] = []*vcard.Field{{Value: phone}}
+	}
+	if org != "" {
+		card[vcard.FieldOrganization] = []*vcard.Field{{Value: org}}
+	}
 	p := fmt.Sprintf("%s%s.vcf", abPath, strings.ReplaceAll(strings.ToLower(name), " ", "-"))
 	b.contacts[p] = carddav.AddressObject{
 		Path:    p,
@@ -63,6 +69,10 @@ func (b *memBackend) seedContactWithEmail(name, freq, email string) {
 		ETag:    fmt.Sprintf("%d", time.Now().UnixNano()),
 		Card:    card,
 	}
+}
+
+func (b *memBackend) seedContactWithEmail(name, freq, email string) {
+	b.seedContactFull(name, freq, email, "", "")
 }
 
 func (b *memBackend) CurrentUserPrincipal(ctx context.Context) (string, error) {
@@ -311,23 +321,32 @@ func TestE2E_List(t *testing.T) {
 	}
 }
 
-func TestE2E_Contacts(t *testing.T) {
+func TestE2E_Contacts_Deprecated(t *testing.T) {
 	env := setupTest(t)
-	env.backend.seedContact("Charlie", "")
+	env.backend.seedContact("Charlie", "1m")
 	env.backend.seedContact("Alice", "")
-	env.backend.seedContact("Bob", "")
+	env.backend.seedContact("Bob", "2w")
 
+	// "frm contacts" should behave like "frm list --all" and print a deprecation warning
 	stdout, stderr, err := env.run(t, "contacts")
 	if err != nil {
 		t.Fatalf("frm contacts failed: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)
 	}
 
-	lines := strings.Split(strings.TrimSpace(stdout), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("expected 3 lines, got %d: %q", len(lines), stdout)
+	if !strings.Contains(stderr, "deprecated") {
+		t.Errorf("expected deprecation warning on stderr, got: %q", stderr)
 	}
-	if lines[0] != "Alice" || lines[1] != "Bob" || lines[2] != "Charlie" {
-		t.Errorf("expected alphabetical order [Alice Bob Charlie], got %v", lines)
+
+	// Should show all contacts in table format (header + 3 contacts)
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("expected 4 lines (header + 3 contacts), got %d: %q", len(lines), stdout)
+	}
+	if !strings.Contains(lines[0], "NAME") || !strings.Contains(lines[0], "FREQ") {
+		t.Errorf("expected table header, got: %s", lines[0])
+	}
+	if !strings.Contains(stdout, "Alice") || !strings.Contains(stdout, "Bob") || !strings.Contains(stdout, "Charlie") {
+		t.Errorf("expected all contacts in output, got: %s", stdout)
 	}
 }
 
@@ -434,6 +453,71 @@ func TestE2E_Check(t *testing.T) {
 	}
 }
 
+func TestE2E_CheckJSONEnriched(t *testing.T) {
+	env := setupTest(t)
+	// Seed a contact with full details and a frequency
+	env.backend.seedContactFull("Alice", "1w", "alice@example.com", "555-1234", "Acme Corp")
+	// Set a group on Alice
+	env.run(t, "group", "set", "Alice", "friends")
+
+	// Log an overdue interaction (30 days ago) with a note
+	overdueEntry := LogEntry{
+		Contact: "Alice",
+		Path:    abPath + "alice.vcf",
+		Time:    time.Now().UTC().Add(-30 * 24 * time.Hour),
+		Note:    "had coffee downtown",
+	}
+	data, _ := json.Marshal(overdueEntry)
+	logPath := filepath.Join(env.configDir, "log.jsonl")
+	if err := os.WriteFile(logPath, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("writing log: %v", err)
+	}
+
+	// Run check --json
+	stdout, stderr, err := env.run(t, "check", "--json")
+	if err != nil {
+		t.Fatalf("frm check --json failed: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)
+	}
+
+	var result []map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 overdue contact, got %d: %s", len(result), stdout)
+	}
+
+	c := result[0]
+	if c["name"] != "Alice" {
+		t.Errorf("expected name Alice, got %v", c["name"])
+	}
+	if c["email"] != "alice@example.com" {
+		t.Errorf("expected email alice@example.com, got %v", c["email"])
+	}
+	if c["phone"] != "555-1234" {
+		t.Errorf("expected phone 555-1234, got %v", c["phone"])
+	}
+	if c["org"] != "Acme Corp" {
+		t.Errorf("expected org Acme Corp, got %v", c["org"])
+	}
+	if c["group"] != "friends" {
+		t.Errorf("expected group friends, got %v", c["group"])
+	}
+	if c["last_note"] != "had coffee downtown" {
+		t.Errorf("expected last_note 'had coffee downtown', got %v", c["last_note"])
+	}
+	if c["frequency"] != "1w" {
+		t.Errorf("expected frequency 1w, got %v", c["frequency"])
+	}
+	if c["last_seen"] == nil || c["last_seen"] == "" {
+		t.Error("expected last_seen to be set")
+	}
+	if c["ago"] == nil || c["ago"] == "" {
+		t.Error("expected ago to be set")
+	}
+}
+
 func TestE2E_Triage(t *testing.T) {
 	env := setupTest(t)
 	env.backend.seedContact("Alice", "")
@@ -493,6 +577,60 @@ func TestE2E_Triage(t *testing.T) {
 	}
 	if strings.Contains(checkOut, "Charlie") {
 		t.Errorf("ignored contact Charlie should not appear in check output")
+	}
+}
+
+func TestE2E_TriageCustomFrequency(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "")
+	env.backend.seedContact("Bob", "")
+	env.backend.seedContact("Charlie", "")
+
+	// Alice gets custom 2w, Bob gets invalid then valid 3d, Charlie gets skip
+	stdin := strings.NewReader("2w\nxyz\n3d\ns\n")
+	stdout, stderr, err := env.runWithStdin(t, stdin, "triage")
+	if err != nil {
+		t.Fatalf("frm triage failed: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)
+	}
+
+	// Verify summary includes custom count
+	if !strings.Contains(stdout, "2 custom") {
+		t.Errorf("expected 2 custom in summary, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "1 skipped") {
+		t.Errorf("expected 1 skipped in summary, got: %s", stdout)
+	}
+
+	// Verify invalid input triggered an error message and re-prompt
+	if !strings.Contains(stdout, "Invalid input") {
+		t.Errorf("expected invalid input error message, got: %s", stdout)
+	}
+
+	// Verify Alice got 2w
+	aliceCard := env.getContactCard("Alice")
+	if aliceCard == nil {
+		t.Fatal("Alice not found")
+	}
+	if freq := aliceCard.PreferredValue(fieldFrequency); freq != "2w" {
+		t.Errorf("expected Alice frequency 2w, got %q", freq)
+	}
+
+	// Verify Bob got 3d (after invalid input was rejected)
+	bobCard := env.getContactCard("Bob")
+	if bobCard == nil {
+		t.Fatal("Bob not found")
+	}
+	if freq := bobCard.PreferredValue(fieldFrequency); freq != "3d" {
+		t.Errorf("expected Bob frequency 3d, got %q", freq)
+	}
+
+	// Verify Charlie has no frequency (skipped)
+	charlieCard := env.getContactCard("Charlie")
+	if charlieCard == nil {
+		t.Fatal("Charlie not found")
+	}
+	if freq := charlieCard.PreferredValue(fieldFrequency); freq != "" {
+		t.Errorf("expected Charlie no frequency, got %q", freq)
 	}
 }
 
@@ -588,6 +726,10 @@ func TestE2E_Stats(t *testing.T) {
 	env.backend.seedContact("Alice", "2w")
 	env.backend.seedContact("Bob", "1m")
 	env.backend.seedContact("Charlie", "")
+	env.backend.seedContact("Dave", "")
+
+	// Ignore Dave: 2 tracked, 1 ignored, 1 untriaged out of 4
+	env.run(t, "ignore", "Dave")
 
 	env.run(t, "log", "Alice", "--note", "coffee")
 	env.run(t, "log", "Alice", "--note", "lunch")
@@ -597,14 +739,45 @@ func TestE2E_Stats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("frm stats failed: %v", err)
 	}
-	if !strings.Contains(stdout, "Total contacts:  3") {
-		t.Errorf("expected 3 total contacts, got: %s", stdout)
+	if !strings.Contains(stdout, "Contacts:        4 total") {
+		t.Errorf("expected 4 total contacts, got: %s", stdout)
 	}
-	if !strings.Contains(stdout, "Tracked:         2") {
+	if !strings.Contains(stdout, "Tracked:       2") {
 		t.Errorf("expected 2 tracked, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "Ignored:       1") {
+		t.Errorf("expected 1 ignored, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "Untriaged:     1 (25%)") {
+		t.Errorf("expected 1 untriaged (25%%), got: %s", stdout)
 	}
 	if !strings.Contains(stdout, "Most contacted:  Alice") {
 		t.Errorf("expected Alice as most contacted, got: %s", stdout)
+	}
+
+	// JSON output includes untriaged and coverage_pct
+	stdout, _, err = env.run(t, "stats", "--json")
+	if err != nil {
+		t.Fatalf("frm stats --json failed: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if result["total_contacts"] != float64(4) {
+		t.Errorf("expected total_contacts=4, got %v", result["total_contacts"])
+	}
+	if result["tracked"] != float64(2) {
+		t.Errorf("expected tracked=2, got %v", result["tracked"])
+	}
+	if result["ignored"] != float64(1) {
+		t.Errorf("expected ignored=1, got %v", result["ignored"])
+	}
+	if result["untriaged"] != float64(1) {
+		t.Errorf("expected untriaged=1, got %v", result["untriaged"])
+	}
+	if result["coverage_pct"] != float64(75) {
+		t.Errorf("expected coverage_pct=75, got %v", result["coverage_pct"])
 	}
 }
 
@@ -636,16 +809,29 @@ func TestE2E_Group(t *testing.T) {
 		t.Errorf("expected professional in groups, got: %s", stdout)
 	}
 
-	// List contacts in group
-	stdout, _, err = env.run(t, "group", "list", "friends")
+	// List contacts in group via "group members"
+	stdout, _, err = env.run(t, "group", "members", "friends")
 	if err != nil {
-		t.Fatalf("frm group list friends failed: %v", err)
+		t.Fatalf("frm group members friends failed: %v", err)
 	}
 	if !strings.Contains(stdout, "Alice") {
 		t.Errorf("expected Alice in friends group, got: %s", stdout)
 	}
 	if strings.Contains(stdout, "Bob") {
 		t.Errorf("Bob should not be in friends group")
+	}
+
+	// Backwards compat: "group list <group>" still works but prints deprecation warning
+	var stderr string
+	stdout, stderr, err = env.run(t, "group", "list", "friends")
+	if err != nil {
+		t.Fatalf("frm group list friends (compat) failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Alice") {
+		t.Errorf("expected Alice in friends group via compat path, got: %s", stdout)
+	}
+	if !strings.Contains(stderr, "deprecated") {
+		t.Errorf("expected deprecation warning on stderr, got: %q", stderr)
 	}
 
 	// Unset group
@@ -668,10 +854,10 @@ func TestE2E_JSON(t *testing.T) {
 	env.backend.seedContact("Alice", "2w")
 	env.backend.seedContact("Bob", "")
 
-	// contacts --json
-	stdout, _, err := env.run(t, "contacts", "--json")
+	// list --all --json (replaces old contacts --json)
+	stdout, _, err := env.run(t, "list", "--all", "--json")
 	if err != nil {
-		t.Fatalf("frm contacts --json failed: %v", err)
+		t.Fatalf("frm list --all --json failed: %v", err)
 	}
 	if !strings.Contains(stdout, `"Alice"`) {
 		t.Errorf("expected Alice in JSON output, got: %s", stdout)
@@ -1058,25 +1244,13 @@ func TestE2E_LogWhen(t *testing.T) {
 		t.Errorf("expected 2025-06-15, got %s", entry.Time.Format("2006-01-02"))
 	}
 
-	// Log with relative date
-	stdout, _, err = env.run(t, "log", "Alice", "--note", "lunch", "--when", "-1w")
-	if err != nil {
-		t.Fatalf("frm log --when relative failed: %v", err)
+	// Relative dates should be rejected
+	_, stderr, err := env.run(t, "log", "Alice", "--note", "lunch", "--when", "-1w")
+	if err == nil {
+		t.Fatal("expected frm log --when with relative date to fail, but it succeeded")
 	}
-
-	// Read second entry
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	// Re-read since we appended
-	data, _ = os.ReadFile(filepath.Join(env.configDir, "log.jsonl"))
-	lines = strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) < 2 {
-		t.Fatalf("expected 2 log entries, got %d", len(lines))
-	}
-	var entry2 LogEntry
-	json.Unmarshal([]byte(lines[1]), &entry2)
-	daysSince := int(time.Since(entry2.Time).Hours() / 24)
-	if daysSince < 5 || daysSince > 9 {
-		t.Errorf("expected ~7 days ago, got %d days ago", daysSince)
+	if !strings.Contains(stderr, "invalid date") {
+		t.Errorf("expected 'invalid date' in error, got: %s", stderr)
 	}
 }
 
@@ -1260,13 +1434,13 @@ func TestE2E_Add(t *testing.T) {
 		t.Errorf("unexpected output: %s", stdout)
 	}
 
-	// Verify the contact exists via contacts command
-	stdout, _, err = env.run(t, "contacts")
+	// Verify the contact exists via list --all
+	stdout, _, err = env.run(t, "list", "--all")
 	if err != nil {
-		t.Fatalf("frm contacts failed: %v", err)
+		t.Fatalf("frm list --all failed: %v", err)
 	}
 	if !strings.Contains(stdout, "Jane Doe") {
-		t.Errorf("expected Jane Doe in contacts, got: %s", stdout)
+		t.Errorf("expected Jane Doe in list --all, got: %s", stdout)
 	}
 
 	// Add a contact with all optional fields
@@ -1302,6 +1476,70 @@ func TestE2E_Add(t *testing.T) {
 	}
 }
 
+func TestE2E_Edit(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContactWithEmail("Alice Smith", "2w", "alice@old.com")
+
+	// Edit email and org
+	stdout, stderr, err := env.run(t, "edit", "Alice Smith", "--email", "alice@new.com", "--org", "NewCorp")
+	if err != nil {
+		t.Fatalf("frm edit failed: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "Updated Alice Smith") {
+		t.Errorf("expected 'Updated Alice Smith' in output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "email=alice@new.com") {
+		t.Errorf("expected email change in output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "org=NewCorp") {
+		t.Errorf("expected org change in output, got: %s", stdout)
+	}
+
+	// Verify the card was actually updated
+	card := env.getContactCard("Alice Smith")
+	if card == nil {
+		t.Fatal("Alice Smith not found in backend")
+	}
+	if card.PreferredValue(vcard.FieldEmail) != "alice@new.com" {
+		t.Errorf("expected email alice@new.com, got %q", card.PreferredValue(vcard.FieldEmail))
+	}
+	if card.PreferredValue(vcard.FieldOrganization) != "NewCorp" {
+		t.Errorf("expected org NewCorp, got %q", card.PreferredValue(vcard.FieldOrganization))
+	}
+
+	// Verify existing fields were not cleared (frequency should still be set)
+	if freq := card.PreferredValue(fieldFrequency); freq != "2w" {
+		t.Errorf("expected frequency 2w to be preserved, got %q", freq)
+	}
+}
+
+func TestE2E_EditNoFlags(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Bob", "1m")
+
+	// Edit with no flags should fail
+	_, stderr, err := env.run(t, "edit", "Bob")
+	if err == nil {
+		t.Fatal("expected frm edit with no flags to fail")
+	}
+	if !strings.Contains(stderr, "no fields to update") {
+		t.Errorf("expected 'no fields to update' error, got: %s", stderr)
+	}
+}
+
+func TestE2E_EditNotFound(t *testing.T) {
+	env := setupTest(t)
+
+	// Edit a contact that doesn't exist
+	_, stderr, err := env.run(t, "edit", "Nobody", "--email", "nobody@test.com")
+	if err == nil {
+		t.Fatal("expected frm edit for nonexistent contact to fail")
+	}
+	if !strings.Contains(stderr, "not found") {
+		t.Errorf("expected 'not found' error, got: %s", stderr)
+	}
+}
+
 func TestE2E_ContextNoEmail(t *testing.T) {
 	messages := map[string][]mockMessage{
 		"alice@example.com": {
@@ -1322,4 +1560,621 @@ func TestE2E_ContextNoEmail(t *testing.T) {
 	if strings.Contains(stdout, "Recent emails:") {
 		t.Errorf("should not show email header for contact without email, got: %s", stdout)
 	}
+}
+
+func TestE2E_Init(t *testing.T) {
+	backend := newMemBackend()
+	handler := &carddav.Handler{Backend: backend}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	configDir := t.TempDir()
+
+	// Pipe stdin: choose carddav, custom provider, enter URL/username/password, decline JMAP
+	input := fmt.Sprintf("c\n3\n%s/\ntestuser\ntestpass\nN\n", server.URL)
+	stdin := strings.NewReader(input)
+
+	cmd := exec.Command(binaryPath, "init")
+	cmd.Env = append(os.Environ(), "FRM_CONFIG_DIR="+configDir)
+	cmd.Stdin = stdin
+	var stdout2, stderr2 bytes.Buffer
+	cmd.Stdout = &stdout2
+	cmd.Stderr = &stderr2
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("frm init failed: %v\nstdout: %s\nstderr: %s", err, stdout2.String(), stderr2.String())
+	}
+
+	output := stdout2.String()
+	if !strings.Contains(output, "Connection successful") {
+		t.Errorf("expected connection success message, got: %s", output)
+	}
+	if !strings.Contains(output, "frm triage") {
+		t.Errorf("expected next steps message, got: %s", output)
+	}
+
+	// Verify config file was written and is valid
+	data, err := os.ReadFile(filepath.Join(configDir, "config.json"))
+	if err != nil {
+		t.Fatalf("reading config: %v", err)
+	}
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parsing config: %v", err)
+	}
+	if len(cfg.Services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(cfg.Services))
+	}
+	svc := cfg.Services[0]
+	if svc.Type != "carddav" {
+		t.Errorf("expected type carddav, got %q", svc.Type)
+	}
+	if svc.Username != "testuser" {
+		t.Errorf("expected username testuser, got %q", svc.Username)
+	}
+	if svc.Password != "testpass" {
+		t.Errorf("expected password testpass, got %q", svc.Password)
+	}
+	if !strings.Contains(svc.Endpoint, server.URL) {
+		t.Errorf("expected endpoint containing %s, got %q", server.URL, svc.Endpoint)
+	}
+}
+
+func TestE2E_InitAddService(t *testing.T) {
+	backend := newMemBackend()
+	handler := &carddav.Handler{Backend: backend}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	configDir := t.TempDir()
+
+	// Write initial config with one carddav service
+	initialCfg := Config{
+		Services: []ServiceConfig{{
+			Type:     "carddav",
+			Endpoint: server.URL + "/",
+			Username: "existing",
+			Password: "existing",
+		}},
+	}
+	data, _ := json.Marshal(initialCfg)
+	os.WriteFile(filepath.Join(configDir, "config.json"), data, 0o644)
+
+	// Run init again, choose to add, add JMAP service
+	input := "a\nj\nhttps://jmap.example.com/session\nmy-token\n"
+	stdin := strings.NewReader(input)
+
+	cmd := exec.Command(binaryPath, "init")
+	cmd.Env = append(os.Environ(), "FRM_CONFIG_DIR="+configDir)
+	cmd.Stdin = stdin
+	var stdout2, stderr2 bytes.Buffer
+	cmd.Stdout = &stdout2
+	cmd.Stderr = &stderr2
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("frm init (add) failed: %v\nstdout: %s\nstderr: %s", err, stdout2.String(), stderr2.String())
+	}
+
+	// Verify config now has both services
+	data, err = os.ReadFile(filepath.Join(configDir, "config.json"))
+	if err != nil {
+		t.Fatalf("reading config: %v", err)
+	}
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parsing config: %v", err)
+	}
+	if len(cfg.Services) != 2 {
+		t.Fatalf("expected 2 services, got %d", len(cfg.Services))
+	}
+	if cfg.Services[0].Type != "carddav" {
+		t.Errorf("expected first service to be carddav, got %q", cfg.Services[0].Type)
+	}
+	if cfg.Services[1].Type != "jmap" {
+		t.Errorf("expected second service to be jmap, got %q", cfg.Services[1].Type)
+	}
+	if cfg.Services[1].SessionEndpoint != "https://jmap.example.com/session" {
+		t.Errorf("expected jmap endpoint, got %q", cfg.Services[1].SessionEndpoint)
+	}
+	if cfg.Services[1].Token != "my-token" {
+		t.Errorf("expected jmap token, got %q", cfg.Services[1].Token)
+	}
+}
+
+func TestE2E_InitWithPreset(t *testing.T) {
+	configDir := t.TempDir()
+
+	// Choose iCloud preset, enter credentials, validation fails, decline save
+	input := "c\n1\napple-user\napple-pass\nN\n"
+	stdin := strings.NewReader(input)
+
+	cmd := exec.Command(binaryPath, "init")
+	cmd.Env = append(os.Environ(), "FRM_CONFIG_DIR="+configDir)
+	cmd.Stdin = stdin
+	var stdout2, stderr2 bytes.Buffer
+	cmd.Stdout = &stdout2
+	cmd.Stderr = &stderr2
+	err := cmd.Run()
+
+	// Should fail because user declined to save after validation failure
+	if err == nil {
+		t.Fatal("expected frm init to fail when user declines to save, but it succeeded")
+	}
+	output := stdout2.String()
+	if !strings.Contains(output, "iCloud") {
+		t.Errorf("expected iCloud message, got: %s", output)
+	}
+}
+
+func TestE2E_FuzzyMatch(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice Smith", "2w")
+	env.backend.seedContact("Bob Jones", "1m")
+
+	// Exact case-insensitive match should work as before.
+	stdout, stderr, err := env.run(t, "context", "alice smith")
+	if err != nil {
+		t.Fatalf("exact case-insensitive lookup failed: %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stdout, "Alice Smith") {
+		t.Errorf("expected Alice Smith in output, got: %s", stdout)
+	}
+	if strings.Contains(stderr, "Using closest match") {
+		t.Errorf("exact match should not produce fuzzy notice, stderr: %s", stderr)
+	}
+
+	// Fuzzy match with a typo (edit distance 1) should auto-select.
+	stdout, stderr, err = env.run(t, "context", "Alic Smith")
+	if err != nil {
+		t.Fatalf("fuzzy lookup for 'Alic Smith' failed: %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stderr, "Using closest match: Alice Smith") {
+		t.Errorf("expected fuzzy match notice on stderr, got: %q", stderr)
+	}
+	if !strings.Contains(stdout, "Alice Smith") {
+		t.Errorf("expected Alice Smith in output after fuzzy match, got: %s", stdout)
+	}
+
+	// Total mismatch should produce a not-found error.
+	_, stderr, err = env.run(t, "context", "xyz")
+	if err == nil {
+		t.Fatal("expected error for 'xyz' lookup, but got success")
+	}
+	if !strings.Contains(stderr, `not found`) {
+		t.Errorf("expected 'not found' in error, got: %s", stderr)
+	}
+
+	// Fuzzy match via findAllContactsMulti (used by track).
+	stdout, stderr, err = env.run(t, "track", "Bbo Jones", "--every", "3w")
+	if err != nil {
+		t.Fatalf("fuzzy track for 'Bbo Jones' failed: %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stderr, "Using closest match: Bob Jones") {
+		t.Errorf("expected fuzzy match notice on stderr, got: %q", stderr)
+	}
+	if !strings.Contains(stdout, "Tracking Bob Jones every 3w") {
+		t.Errorf("expected tracking confirmation, got: %s", stdout)
+	}
+}
+
+func TestE2E_FuzzyMatchSuggestions(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "2w")
+	env.backend.seedContact("Alicx", "1m") // edit distance 1 from "Alicy"
+
+	// When multiple contacts are within edit distance, show suggestions instead of auto-selecting.
+	_, stderr, err := env.run(t, "context", "Alicy")
+	if err == nil {
+		t.Fatal("expected error when multiple fuzzy matches exist, but got success")
+	}
+	if !strings.Contains(stderr, "Did you mean") {
+		t.Errorf("expected 'Did you mean' in error, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "Alice") {
+		t.Errorf("expected 'Alice' in suggestions, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "Alicx") {
+		t.Errorf("expected 'Alicx' in suggestions, got: %s", stderr)
+	}
+}
+
+func TestE2E_TrackJSON(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "")
+
+	stdout, _, err := env.run(t, "track", "Alice", "--every", "2w", "--json")
+	if err != nil {
+		t.Fatalf("frm track --json failed: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if result["action"] != "track" {
+		t.Errorf("expected action=track, got %v", result["action"])
+	}
+	if result["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", result["name"])
+	}
+	if result["frequency"] != "2w" {
+		t.Errorf("expected frequency=2w, got %v", result["frequency"])
+	}
+	if result["accounts"] != float64(1) {
+		t.Errorf("expected accounts=1, got %v", result["accounts"])
+	}
+}
+
+func TestE2E_IgnoreJSON(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "2w")
+
+	stdout, _, err := env.run(t, "ignore", "Alice", "--json")
+	if err != nil {
+		t.Fatalf("frm ignore --json failed: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if result["action"] != "ignore" {
+		t.Errorf("expected action=ignore, got %v", result["action"])
+	}
+	if result["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", result["name"])
+	}
+	if result["accounts"] != float64(1) {
+		t.Errorf("expected accounts=1, got %v", result["accounts"])
+	}
+}
+
+func TestE2E_LogJSON(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "2w")
+
+	stdout, _, err := env.run(t, "log", "Alice", "--note", "coffee chat", "--when", "2024-01-15", "--json")
+	if err != nil {
+		t.Fatalf("frm log --json failed: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if result["action"] != "log" {
+		t.Errorf("expected action=log, got %v", result["action"])
+	}
+	if result["contact"] != "Alice" {
+		t.Errorf("expected contact=Alice, got %v", result["contact"])
+	}
+	if result["note"] != "coffee chat" {
+		t.Errorf("expected note='coffee chat', got %v", result["note"])
+	}
+	// Time should be RFC3339 format
+	timeStr, ok := result["time"].(string)
+	if !ok || !strings.Contains(timeStr, "2024-01-15") {
+		t.Errorf("expected time containing 2024-01-15, got %v", result["time"])
+	}
+}
+
+func TestE2E_JSONError(t *testing.T) {
+	env := setupTest(t)
+
+	// Try to track a contact that doesn't exist, with --json
+	stdout, _, err := env.run(t, "track", "Nobody", "--every", "2w", "--json")
+	if err == nil {
+		t.Fatal("expected frm track for nonexistent contact to fail")
+	}
+
+	var result map[string]string
+	if jsonErr := json.Unmarshal([]byte(stdout), &result); jsonErr != nil {
+		t.Fatalf("expected JSON error on stdout, got: %s", stdout)
+	}
+	if result["error"] == "" {
+		t.Errorf("expected non-empty error field, got: %v", result)
+	}
+	if !strings.Contains(result["error"], "not found") {
+		t.Errorf("expected 'not found' in error, got: %s", result["error"])
+	}
+}
+
+func TestE2E_FuzzySubstringMatch(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice Smith", "2w")
+	env.backend.seedContact("Bob Jones", "1m")
+
+	// Substring match: "Alice" is contained in "Alice Smith".
+	// With only one match, it should auto-select.
+	stdout, stderr, err := env.run(t, "context", "Alice")
+	if err != nil {
+		t.Fatalf("substring lookup for 'Alice' failed: %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stderr, "Using closest match: Alice Smith") {
+		t.Errorf("expected fuzzy match notice on stderr, got: %q", stderr)
+	}
+	if !strings.Contains(stdout, "Alice Smith") {
+		t.Errorf("expected Alice Smith in output, got: %s", stdout)
+	}
+}
+
+func TestE2E_DryRun(t *testing.T) {
+	t.Run("track", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContact("Alice", "")
+
+		stdout, _, err := env.run(t, "track", "Alice", "--every", "2w", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm track --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would track Alice every 2w (dry run)") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+
+		// Verify the contact was NOT actually updated
+		card := env.getContactCard("Alice")
+		if card == nil {
+			t.Fatal("Alice not found in backend")
+		}
+		freq := card.PreferredValue(fieldFrequency)
+		if freq != "" {
+			t.Errorf("expected empty frequency after dry run, got %q", freq)
+		}
+	})
+
+	t.Run("track_json", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContact("Alice", "")
+
+		stdout, _, err := env.run(t, "track", "Alice", "--every", "2w", "--dry-run", "--json")
+		if err != nil {
+			t.Fatalf("frm track --dry-run --json failed: %v", err)
+		}
+
+		var result map[string]interface{}
+		if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+			t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+		}
+		if result["dry_run"] != true {
+			t.Errorf("expected dry_run=true, got %v", result["dry_run"])
+		}
+		if result["name"] != "Alice" {
+			t.Errorf("expected name=Alice, got %v", result["name"])
+		}
+
+		// Verify not updated
+		card := env.getContactCard("Alice")
+		if freq := card.PreferredValue(fieldFrequency); freq != "" {
+			t.Errorf("expected empty frequency after dry run, got %q", freq)
+		}
+	})
+
+	t.Run("untrack", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContact("Alice", "2w")
+
+		stdout, _, err := env.run(t, "untrack", "Alice", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm untrack --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would stop tracking Alice (dry run)") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+
+		// Frequency should still be set
+		card := env.getContactCard("Alice")
+		if freq := card.PreferredValue(fieldFrequency); freq != "2w" {
+			t.Errorf("expected frequency 2w preserved after dry run, got %q", freq)
+		}
+	})
+
+	t.Run("ignore", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContact("Alice", "2w")
+
+		stdout, _, err := env.run(t, "ignore", "Alice", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm ignore --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would ignore Alice (dry run)") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+
+		// Should NOT be ignored
+		card := env.getContactCard("Alice")
+		if card.PreferredValue(fieldIgnore) != "" {
+			t.Error("expected Alice NOT to be ignored after dry run")
+		}
+	})
+
+	t.Run("unignore", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContact("Alice", "")
+
+		// First actually ignore Alice
+		_, _, err := env.run(t, "ignore", "Alice")
+		if err != nil {
+			t.Fatalf("frm ignore failed: %v", err)
+		}
+
+		stdout, _, err := env.run(t, "unignore", "Alice", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm unignore --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would unignore Alice (dry run)") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+
+		// Should still be ignored
+		card := env.getContactCard("Alice")
+		if card.PreferredValue(fieldIgnore) != "true" {
+			t.Error("expected Alice to still be ignored after dry run")
+		}
+	})
+
+	t.Run("log", func(t *testing.T) {
+		env := setupTest(t)
+
+		stdout, _, err := env.run(t, "log", "Alice", "--note", "coffee", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm log --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would log interaction with Alice (dry run)") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+
+		// Log file should not exist
+		logPath := filepath.Join(env.configDir, "log.jsonl")
+		if _, err := os.Stat(logPath); err == nil {
+			t.Error("expected no log file after dry run, but it exists")
+		}
+	})
+
+	t.Run("snooze", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContact("Alice", "2w")
+
+		stdout, _, err := env.run(t, "snooze", "Alice", "--until", "2099-12-31", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm snooze --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would snooze Alice until 2099-12-31 (dry run)") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+
+		card := env.getContactCard("Alice")
+		if card.PreferredValue(fieldSnoozeUntil) != "" {
+			t.Error("expected no snooze after dry run")
+		}
+	})
+
+	t.Run("unsnooze", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContact("Alice", "2w")
+
+		// Actually snooze first
+		_, _, err := env.run(t, "snooze", "Alice", "--until", "2099-12-31")
+		if err != nil {
+			t.Fatalf("frm snooze failed: %v", err)
+		}
+
+		stdout, _, err := env.run(t, "unsnooze", "Alice", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm unsnooze --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would unsnooze Alice (dry run)") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+
+		// Should still be snoozed
+		card := env.getContactCard("Alice")
+		if card.PreferredValue(fieldSnoozeUntil) == "" {
+			t.Error("expected Alice to still be snoozed after dry run")
+		}
+	})
+
+	t.Run("add", func(t *testing.T) {
+		env := setupTest(t)
+
+		stdout, _, err := env.run(t, "add", "Jane Doe", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm add --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would add contact Jane Doe (dry run)") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+
+		// Contact should NOT exist
+		stdout, _, err = env.run(t, "list", "--all")
+		if err != nil {
+			t.Fatalf("frm list --all failed: %v", err)
+		}
+		if strings.Contains(stdout, "Jane Doe") {
+			t.Error("expected Jane Doe NOT in list after dry run add")
+		}
+	})
+
+	t.Run("edit", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContactWithEmail("Alice", "2w", "alice@old.com")
+
+		stdout, _, err := env.run(t, "edit", "Alice", "--email", "alice@new.com", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm edit --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would update Alice") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+		if !strings.Contains(stdout, "dry run") {
+			t.Errorf("expected dry run in output: %q", stdout)
+		}
+
+		// Email should NOT have changed
+		card := env.getContactCard("Alice")
+		if card.PreferredValue(vcard.FieldEmail) != "alice@old.com" {
+			t.Errorf("expected email unchanged after dry run, got %q", card.PreferredValue(vcard.FieldEmail))
+		}
+	})
+
+	t.Run("group_set", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContact("Alice", "2w")
+
+		stdout, _, err := env.run(t, "group", "set", "Alice", "friends", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm group set --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would set Alice group to friends (dry run)") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+
+		card := env.getContactCard("Alice")
+		if card.PreferredValue(fieldGroup) != "" {
+			t.Error("expected no group after dry run")
+		}
+	})
+
+	t.Run("group_unset", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContact("Alice", "2w")
+
+		// Actually set group first
+		_, _, err := env.run(t, "group", "set", "Alice", "friends")
+		if err != nil {
+			t.Fatalf("frm group set failed: %v", err)
+		}
+
+		stdout, _, err := env.run(t, "group", "unset", "Alice", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm group unset --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Would remove group from Alice (dry run)") {
+			t.Errorf("unexpected output: %q", stdout)
+		}
+
+		// Group should still be set
+		card := env.getContactCard("Alice")
+		if card.PreferredValue(fieldGroup) != "friends" {
+			t.Errorf("expected group friends preserved after dry run, got %q", card.PreferredValue(fieldGroup))
+		}
+	})
+
+	t.Run("spread", func(t *testing.T) {
+		env := setupTest(t)
+		env.backend.seedContact("Alice", "1m")
+
+		// spread --apply --dry-run should behave as dry run
+		stdout, _, err := env.run(t, "spread", "--apply", "--dry-run")
+		if err != nil {
+			t.Fatalf("frm spread --apply --dry-run failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Dry run") {
+			t.Errorf("expected dry run message, got: %s", stdout)
+		}
+
+		card := env.getContactCard("Alice")
+		if card.PreferredValue(fieldSnoozeUntil) != "" {
+			t.Error("expected no snooze after spread --dry-run")
+		}
+	})
 }

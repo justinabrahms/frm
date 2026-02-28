@@ -22,22 +22,54 @@ func init() {
 				return err
 			}
 
-			ctx := context.Background()
+			name := contactName(*matches[0].obj)
+			dryRun := isDryRun(cmd)
+
 			var updated, skipped int
 			for _, m := range matches {
 				if isIgnored(m.obj.Card) {
 					skipped++
 					continue
 				}
-				setIgnored(m.obj.Card)
-				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
-					return fmt.Errorf("updating contact: %w", err)
-				}
 				updated++
 			}
 
-			name := contactName(*matches[0].obj)
-			if updated == 0 {
+			if !dryRun && updated > 0 {
+				// Reset counts and actually perform the update
+				updated = 0
+				ctx := context.Background()
+				for _, m := range matches {
+					if isIgnored(m.obj.Card) {
+						continue
+					}
+					setIgnored(m.obj.Card)
+					if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+						return fmt.Errorf("updating contact: %w", err)
+					}
+					updated++
+				}
+			}
+
+			if isJSONMode(cmd) {
+				out := map[string]interface{}{
+					"action":   "ignore",
+					"name":     name,
+					"accounts": updated,
+					"skipped":  skipped,
+				}
+				if dryRun {
+					out["dry_run"] = true
+				}
+				return printJSON(cmd, out)
+			}
+
+			if dryRun {
+				if updated == 0 {
+					fmt.Printf("%s is already ignored\n", name)
+				} else {
+					fmt.Printf("Would ignore %s (dry run)\n", name)
+				}
+			} else if updated == 0 {
 				fmt.Printf("%s is already ignored\n", name)
 			} else if len(matches) > 1 {
 				fmt.Printf("Ignored %s (%d accounts)\n", name, updated)

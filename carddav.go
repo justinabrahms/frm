@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/emersion/go-vcard"
@@ -63,19 +64,45 @@ func findContactByName(ctx context.Context, client *carddav.Client, book *cardda
 		return nil, err
 	}
 	nameLower := strings.ToLower(name)
+	var allNames []string
 	for _, obj := range objs {
-		if strings.ToLower(contactName(obj)) == nameLower {
+		n := contactName(obj)
+		if strings.ToLower(n) == nameLower {
 			return &obj, nil
 		}
+		allNames = append(allNames, n)
 	}
-	return nil, fmt.Errorf("contact %q not found", name)
+
+	// No exact match. Try fuzzy matching.
+	candidates := fuzzyFind(name, allNames)
+	if len(candidates) == 1 && candidates[0].distance <= fuzzyMaxDistance {
+		for _, obj := range objs {
+			if contactName(obj) == candidates[0].name {
+				fmt.Fprintf(os.Stderr, "Using closest match: %s\n", candidates[0].name)
+				return &obj, nil
+			}
+		}
+	}
+
+	return nil, &fuzzyMatchError{query: name, candidates: candidates}
 }
 
 // findContactMulti searches all accounts for a contact by name.
 // Returns the matching object and the client it belongs to.
+// If no exact match is found, it tries fuzzy matching: substring first,
+// then edit distance. A single close match (distance <= 2) is auto-selected
+// with a notice on stderr. Multiple candidates produce a suggestion error.
 func findContactMulti(cfg Config, name string) (*carddav.AddressObject, *carddav.Client, error) {
 	ctx := context.Background()
 	nameLower := strings.ToLower(name)
+
+	// Collect all contacts across accounts for fuzzy fallback.
+	type objWithClient struct {
+		obj    carddav.AddressObject
+		client *carddav.Client
+	}
+	var allObjs []objWithClient
+
 	for _, svc := range cfg.carddavServices() {
 		client, err := newCardDAVClient(svc)
 		if err != nil {
@@ -93,9 +120,28 @@ func findContactMulti(cfg Config, name string) (*carddav.AddressObject, *carddav
 			if strings.ToLower(contactName(obj)) == nameLower {
 				return &obj, client, nil
 			}
+			allObjs = append(allObjs, objWithClient{obj: obj, client: client})
 		}
 	}
-	return nil, nil, fmt.Errorf("contact %q not found", name)
+
+	// No exact match. Try fuzzy matching.
+	names := make([]string, len(allObjs))
+	nameToIdx := make(map[string]int, len(allObjs))
+	for i, oc := range allObjs {
+		n := contactName(oc.obj)
+		names[i] = n
+		nameToIdx[n] = i
+	}
+
+	candidates := fuzzyFind(name, names)
+	if len(candidates) == 1 && candidates[0].distance <= fuzzyMaxDistance {
+		idx := nameToIdx[candidates[0].name]
+		obj := allObjs[idx].obj
+		fmt.Fprintf(os.Stderr, "Using closest match: %s\n", candidates[0].name)
+		return &obj, allObjs[idx].client, nil
+	}
+
+	return nil, nil, &fuzzyMatchError{query: name, candidates: candidates}
 }
 
 // contactMatch holds a matched contact and its client, for multi-account mutations.
@@ -106,10 +152,18 @@ type contactMatch struct {
 
 // findAllContactsMulti searches all accounts for contacts matching a name.
 // Returns all matches across all accounts.
+// Uses the same fuzzy fallback logic as findContactMulti.
 func findAllContactsMulti(cfg Config, name string) ([]contactMatch, error) {
 	ctx := context.Background()
 	nameLower := strings.ToLower(name)
 	var matches []contactMatch
+
+	type objWithClient struct {
+		obj    carddav.AddressObject
+		client *carddav.Client
+	}
+	var allObjs []objWithClient
+
 	for _, svc := range cfg.carddavServices() {
 		client, err := newCardDAVClient(svc)
 		if err != nil {
@@ -125,15 +179,34 @@ func findAllContactsMulti(cfg Config, name string) ([]contactMatch, error) {
 		}
 		for _, obj := range objs {
 			if strings.ToLower(contactName(obj)) == nameLower {
-				o := obj // copy for pointer
+				o := obj
 				matches = append(matches, contactMatch{obj: &o, client: client})
 			}
+			allObjs = append(allObjs, objWithClient{obj: obj, client: client})
 		}
 	}
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("contact %q not found", name)
+	if len(matches) > 0 {
+		return matches, nil
 	}
-	return matches, nil
+
+	// No exact match. Try fuzzy matching.
+	names := make([]string, len(allObjs))
+	nameToIdx := make(map[string]int, len(allObjs))
+	for i, oc := range allObjs {
+		n := contactName(oc.obj)
+		names[i] = n
+		nameToIdx[n] = i
+	}
+
+	candidates := fuzzyFind(name, names)
+	if len(candidates) == 1 && candidates[0].distance <= fuzzyMaxDistance {
+		idx := nameToIdx[candidates[0].name]
+		o := allObjs[idx].obj
+		fmt.Fprintf(os.Stderr, "Using closest match: %s\n", candidates[0].name)
+		return []contactMatch{{obj: &o, client: allObjs[idx].client}}, nil
+	}
+
+	return nil, &fuzzyMatchError{query: name, candidates: candidates}
 }
 
 func contactName(obj carddav.AddressObject) string {

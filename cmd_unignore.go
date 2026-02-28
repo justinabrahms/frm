@@ -22,24 +22,51 @@ func init() {
 				return err
 			}
 
-			ctx := context.Background()
-			var updated int
+			name := contactName(*matches[0].obj)
+			dryRun := isDryRun(cmd)
+
+			var wouldUpdate int
 			for _, m := range matches {
-				if !isIgnored(m.obj.Card) {
-					continue
+				if isIgnored(m.obj.Card) {
+					wouldUpdate++
 				}
-				removeIgnored(m.obj.Card)
-				if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
-					return fmt.Errorf("updating contact: %w", err)
-				}
-				updated++
 			}
 
-			name := contactName(*matches[0].obj)
-			if updated == 0 {
+			if !dryRun && wouldUpdate > 0 {
+				ctx := context.Background()
+				for _, m := range matches {
+					if !isIgnored(m.obj.Card) {
+						continue
+					}
+					removeIgnored(m.obj.Card)
+					if _, err := m.client.PutAddressObject(ctx, m.obj.Path, m.obj.Card); err != nil {
+						return fmt.Errorf("updating contact: %w", err)
+					}
+				}
+			}
+
+			if isJSONMode(cmd) {
+				out := map[string]interface{}{
+					"action":   "unignore",
+					"name":     name,
+					"accounts": wouldUpdate,
+				}
+				if dryRun {
+					out["dry_run"] = true
+				}
+				return printJSON(cmd, out)
+			}
+
+			if dryRun {
+				if wouldUpdate == 0 {
+					fmt.Printf("%s is not ignored\n", name)
+				} else {
+					fmt.Printf("Would unignore %s (dry run)\n", name)
+				}
+			} else if wouldUpdate == 0 {
 				fmt.Printf("%s is not ignored\n", name)
-			} else if updated > 1 {
-				fmt.Printf("Unignored %s (%d accounts)\n", name, updated)
+			} else if wouldUpdate > 1 {
+				fmt.Printf("Unignored %s (%d accounts)\n", name, wouldUpdate)
 			} else {
 				fmt.Printf("Unignored %s\n", name)
 			}

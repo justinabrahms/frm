@@ -83,12 +83,43 @@ func init() {
 				card[vcard.FieldURL] = []*vcard.Field{{Value: url}}
 			}
 
-			path := book.Path + newUUID() + ".vcf"
-			if _, err := client.PutAddressObject(ctx, path, card); err != nil {
-				return fmt.Errorf("creating contact: %w", err)
+			dryRun := isDryRun(cmd)
+
+			if !dryRun {
+				path := book.Path + newUUID() + ".vcf"
+				if _, err := client.PutAddressObject(ctx, path, card); err != nil {
+					return fmt.Errorf("creating contact: %w", err)
+				}
 			}
 
-			fmt.Printf("Added contact %s\n", name)
+			if isJSONMode(cmd) {
+				out := map[string]interface{}{
+					"action": "add",
+					"name":   name,
+				}
+				if email != "" {
+					out["email"] = email
+				}
+				if phone != "" {
+					out["phone"] = phone
+				}
+				if org != "" {
+					out["org"] = org
+				}
+				if url != "" {
+					out["url"] = url
+				}
+				if dryRun {
+					out["dry_run"] = true
+				}
+				return printJSON(cmd, out)
+			}
+
+			if dryRun {
+				fmt.Printf("Would add contact %s (dry run)\n", name)
+			} else {
+				fmt.Printf("Added contact %s\n", name)
+			}
 			return nil
 		},
 	}

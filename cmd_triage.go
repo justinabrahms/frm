@@ -90,7 +90,7 @@ func init() {
 }
 
 func runTriage(ctx context.Context, contacts []triageContact, reader *bufio.Reader, w io.Writer, providers []ContextProvider) error {
-	var monthly, quarterly, yearly, skipped, ignored int
+	var monthly, quarterly, yearly, skipped, ignored, custom int
 
 	for _, tc := range contacts {
 		name := contactName(tc.obj)
@@ -110,46 +110,66 @@ func runTriage(ctx context.Context, contacts []triageContact, reader *bufio.Read
 				fmt.Fprintf(w, "%s\n", line)
 			}
 		}
-		fmt.Fprintf(w, "  [m]onthly  [q]uarterly  [y]early  [s]kip  [i]gnore  [Enter=skip]> ")
 
-		line, err := reader.ReadString('\n')
-		if err != nil && err != io.EOF {
-			return fmt.Errorf("reading input: %w", err)
-		}
-		choice := strings.TrimSpace(strings.ToLower(line))
+		for {
+			fmt.Fprintf(w, "  [m]onthly  [q]uarterly  [y]early  [s]kip  [i]gnore  or frequency (e.g. 2w)  [Enter=skip]> ")
 
-		switch choice {
-		case "m":
-			setFrequency(tc.obj.Card, "1m")
-			if _, err := tc.client.PutAddressObject(ctx, tc.obj.Path, tc.obj.Card); err != nil {
-				return fmt.Errorf("updating %s: %w", name, err)
+			line, err := reader.ReadString('\n')
+			if err != nil && err != io.EOF {
+				return fmt.Errorf("reading input: %w", err)
 			}
-			monthly++
-		case "q":
-			setFrequency(tc.obj.Card, "3m")
-			if _, err := tc.client.PutAddressObject(ctx, tc.obj.Path, tc.obj.Card); err != nil {
-				return fmt.Errorf("updating %s: %w", name, err)
+			choice := strings.TrimSpace(strings.ToLower(line))
+
+			handled := true
+			switch choice {
+			case "m":
+				setFrequency(tc.obj.Card, "1m")
+				if _, err := tc.client.PutAddressObject(ctx, tc.obj.Path, tc.obj.Card); err != nil {
+					return fmt.Errorf("updating %s: %w", name, err)
+				}
+				monthly++
+			case "q":
+				setFrequency(tc.obj.Card, "3m")
+				if _, err := tc.client.PutAddressObject(ctx, tc.obj.Path, tc.obj.Card); err != nil {
+					return fmt.Errorf("updating %s: %w", name, err)
+				}
+				quarterly++
+			case "y":
+				setFrequency(tc.obj.Card, "12m")
+				if _, err := tc.client.PutAddressObject(ctx, tc.obj.Path, tc.obj.Card); err != nil {
+					return fmt.Errorf("updating %s: %w", name, err)
+				}
+				yearly++
+			case "i":
+				setIgnored(tc.obj.Card)
+				if _, err := tc.client.PutAddressObject(ctx, tc.obj.Path, tc.obj.Card); err != nil {
+					return fmt.Errorf("updating %s: %w", name, err)
+				}
+				ignored++
+			case "s", "":
+				skipped++
+			default:
+				// Try parsing as a custom frequency duration
+				if _, parseErr := parseDuration(choice); parseErr != nil {
+					fmt.Fprintf(w, "  Invalid input %q: %v\n", choice, parseErr)
+					handled = false
+				} else {
+					setFrequency(tc.obj.Card, choice)
+					if _, err := tc.client.PutAddressObject(ctx, tc.obj.Path, tc.obj.Card); err != nil {
+						return fmt.Errorf("updating %s: %w", name, err)
+					}
+					custom++
+				}
 			}
-			quarterly++
-		case "y":
-			setFrequency(tc.obj.Card, "12m")
-			if _, err := tc.client.PutAddressObject(ctx, tc.obj.Path, tc.obj.Card); err != nil {
-				return fmt.Errorf("updating %s: %w", name, err)
+
+			if handled {
+				break
 			}
-			yearly++
-		case "i":
-			setIgnored(tc.obj.Card)
-			if _, err := tc.client.PutAddressObject(ctx, tc.obj.Path, tc.obj.Card); err != nil {
-				return fmt.Errorf("updating %s: %w", name, err)
-			}
-			ignored++
-		default:
-			skipped++
 		}
 	}
 
-	total := monthly + quarterly + yearly + skipped + ignored
-	fmt.Fprintf(w, "Triaged %d contacts: %d monthly, %d quarterly, %d yearly, %d skipped, %d ignored\n",
-		total, monthly, quarterly, yearly, skipped, ignored)
+	total := monthly + quarterly + yearly + custom + skipped + ignored
+	fmt.Fprintf(w, "Triaged %d contacts: %d monthly, %d quarterly, %d yearly, %d custom, %d skipped, %d ignored\n",
+		total, monthly, quarterly, yearly, custom, skipped, ignored)
 	return nil
 }

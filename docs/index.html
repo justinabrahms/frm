@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>frm -- maintain meaningful relationships</title>
+  <meta name="description" content="CLI friend relationship manager backed by CardDAV. Single binary, no database.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <nav>
+    <a href="./" class="site-name" aria-current="page">frm</a>
+    <a href="guide.html">Guide</a>
+    <a href="commands.html">Commands</a>
+    <a href="agents.html">Agents</a>
+    <a href="https://github.com/justinabrahms/frm">GitHub</a>
+  </nav>
+</header>
+
+<main class="content">
+  <div class="hero">
+    <h1>frm</h1>
+    <p class="tagline">maintain meaningful relationships</p>
+    <p class="description">
+      A CLI personal relationship manager backed by CardDAV. Single binary,
+      no database &mdash; your contacts live in your existing address book,
+      interaction history in a local file.
+    </p>
+  </div>
+
+  <div class="install-block">
+    <code>go install github.com/justinabrahms/frm@latest</code>
+  </div>
+
+  <p style="text-align:center; font-size:0.9rem; color:#78909c; margin-top:-0.5rem;">
+    Or download a binary from
+    <a href="https://github.com/justinabrahms/frm/releases">Releases</a>.
+  </p>
+
+  <h2>Get started in three steps</h2>
+
+  <div class="steps">
+    <div class="step">
+      <span class="step-number">1</span>
+      <h3>Connect your address book</h3>
+      <p>Run <code>frm init</code> to connect iCloud, Fastmail, or any CardDAV server.</p>
+    </div>
+    <div class="step">
+      <span class="step-number">2</span>
+      <h3>Triage your contacts</h3>
+      <p>Run <code>frm triage</code> to walk through contacts and decide how often to stay in touch &mdash; monthly, quarterly, yearly, or a custom interval like <code>2w</code>.</p>
+    </div>
+    <div class="step">
+      <span class="step-number">3</span>
+      <h3>Check in regularly</h3>
+      <p>Run <code>frm check</code> to see who is overdue. After you reach out, log it: <code>frm log "Alice" --note "caught up over coffee"</code>.</p>
+    </div>
+  </div>
+
+  <h2>Built for automation</h2>
+
+  <p>
+    Every command supports <code>--json</code> for structured output and
+    <code>--dry-run</code> for safe previews. An AI agent can drive your entire
+    relationship maintenance workflow: check who needs attention, prepare context
+    before meetings, and triage new contacts automatically.
+  </p>
+  <p>
+    Read the <a href="agents.html">Agent Integration Guide</a> to learn more.
+  </p>
+
+  <h2>Explore the docs</h2>
+
+  <div class="page-links">
+    <a href="guide.html" class="page-link">
+      <h3>Getting Started</h3>
+      <p>Installation, setup, and your daily workflow.</p>
+    </a>
+    <a href="commands.html" class="page-link">
+      <h3>Command Reference</h3>
+      <p>Every command, flag, and example.</p>
+    </a>
+    <a href="agents.html" class="page-link">
+      <h3>Agent Integration</h3>
+      <p>JSON output, triage loops, and automation scripts.</p>
+    </a>
+  </div>
+
+  <h2>How it works</h2>
+
+  <p>
+    frm stores metadata directly on your contacts using custom vCard fields in
+    your CardDAV server. There is no separate database to manage or sync.
+  </p>
+  <ul>
+    <li><code>X-FRM-FREQUENCY</code> &mdash; tracking interval (e.g. <code>2w</code>, <code>1m</code>)</li>
+    <li><code>X-FRM-IGNORE</code> &mdash; permanently hide from triage and check</li>
+    <li><code>X-FRM-GROUP</code> &mdash; freeform group tag</li>
+    <li><code>X-FRM-SNOOZE-UNTIL</code> &mdash; suppress until a specific date</li>
+  </ul>
+  <p>
+    Interaction history lives in <code>~/.frm/log.jsonl</code>. This is the only
+    local state &mdash; back it up or symlink it to a synced directory.
+  </p>
+</main>
+
+<footer class="site-footer">
+  <a href="https://github.com/justinabrahms/frm">frm</a> is open source under the MIT license.
+</footer>
+
+</body>
+</html>
