@@ -39,6 +39,25 @@
     <a href="https://github.com/justinabrahms/frm/releases">Releases</a>.
   </p>
 
+  <h2>What it looks like</h2>
+
+  <pre><code>$ frm check
+Overdue contacts:
+  Alice Johnson        last: 3 weeks ago   every: 2w
+  Bob Chen             last: 2 months ago   every: 1m
+
+$ frm log "Alice Johnson" --note "caught up over coffee"
+Logged interaction with Alice Johnson.
+
+$ frm triage
+Dana Williams — dana@example.com
+  (m)onthly  (q)uarterly  (y)early  (c)ustom  (i)gnore  (s)kip  (Q)uit
+  > m
+  ✓ Tracking Dana Williams every 1m
+
+$ frm stats
+Tracked: 42   Ignored: 15   Overdue: 2   Groups: 3</code></pre>
+
   <h2>Get started in three steps</h2>
 
   <div class="steps">
