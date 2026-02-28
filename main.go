@@ -43,6 +43,14 @@ For Automation:
 
 func init() {
 	rootCmd.PersistentFlags().Bool("dry-run", false, "Show what would happen without making changes")
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print the version number",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println("frm " + getVersion())
+		},
+	})
 }
 
 // isDryRun returns true if the --dry-run flag is set on the command.
