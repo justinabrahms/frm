@@ -50,10 +50,25 @@ func init() {
 				changes = append(changes, fmt.Sprintf("org=%s", org))
 			}
 
-			url, _ := cmd.Flags().GetString("url")
+			urls, _ := cmd.Flags().GetStringSlice("url")
 			if cmd.Flags().Changed("url") {
-				obj.Card[vcard.FieldURL] = []*vcard.Field{{Value: url}}
-				changes = append(changes, fmt.Sprintf("url=%s", url))
+				// Collect existing URLs for dedup.
+				seen := make(map[string]bool)
+				var merged []*vcard.Field
+				for _, f := range obj.Card[vcard.FieldURL] {
+					if f.Value != "" && !seen[f.Value] {
+						seen[f.Value] = true
+						merged = append(merged, f)
+					}
+				}
+				for _, u := range urls {
+					if u != "" && !seen[u] {
+						seen[u] = true
+						merged = append(merged, &vcard.Field{Value: u})
+					}
+				}
+				obj.Card[vcard.FieldURL] = merged
+				changes = append(changes, fmt.Sprintf("url=%s", strings.Join(urls, ",")))
 			}
 
 			if len(changes) == 0 {
@@ -92,6 +107,6 @@ func init() {
 	cmd.Flags().String("email", "", "email address")
 	cmd.Flags().String("phone", "", "phone number")
 	cmd.Flags().String("org", "", "organization")
-	cmd.Flags().String("url", "", "website or social URL")
+	cmd.Flags().StringSlice("url", nil, "website or social URL (repeatable, deduped)")
 	rootCmd.AddCommand(cmd)
 }

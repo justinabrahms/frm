@@ -1540,6 +1540,57 @@ func TestE2E_EditNotFound(t *testing.T) {
 	}
 }
 
+func TestE2E_EditMultiURL(t *testing.T) {
+	env := setupTest(t)
+	env.backend.seedContact("Alice", "2w")
+
+	// Manually set an existing URL on Alice's card.
+	card := env.getContactCard("Alice")
+	card[vcard.FieldURL] = []*vcard.Field{{Value: "https://alice.example.com"}}
+	env.backend.mu.Lock()
+	for p, obj := range env.backend.contacts {
+		if obj.Card.PreferredValue(vcard.FieldFormattedName) == "Alice" {
+			obj.Card = card
+			env.backend.contacts[p] = obj
+		}
+	}
+	env.backend.mu.Unlock()
+
+	// Add two new URLs, one of which duplicates the existing one.
+	stdout, stderr, err := env.run(t, "edit", "Alice",
+		"--url", "https://alice.example.com",
+		"--url", "https://alice.dev",
+	)
+	if err != nil {
+		t.Fatalf("frm edit --url failed: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)
+	}
+
+	// Verify the card has exactly 2 URLs (deduped, not 3).
+	card = env.getContactCard("Alice")
+	if card == nil {
+		t.Fatal("Alice not found in backend")
+	}
+	urlFields := card[vcard.FieldURL]
+	if len(urlFields) != 2 {
+		var vals []string
+		for _, f := range urlFields {
+			vals = append(vals, f.Value)
+		}
+		t.Fatalf("expected 2 URLs, got %d: %v", len(urlFields), vals)
+	}
+
+	urls := map[string]bool{}
+	for _, f := range urlFields {
+		urls[f.Value] = true
+	}
+	if !urls["https://alice.example.com"] {
+		t.Error("expected existing URL https://alice.example.com to be preserved")
+	}
+	if !urls["https://alice.dev"] {
+		t.Error("expected new URL https://alice.dev to be added")
+	}
+}
+
 func TestE2E_ContextNoEmail(t *testing.T) {
 	messages := map[string][]mockMessage{
 		"alice@example.com": {
