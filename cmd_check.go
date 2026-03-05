@@ -23,8 +23,9 @@ type overdueContact struct {
 
 func init() {
 	rootCmd.AddCommand(&cobra.Command{
-		Use:   "check",
-		Short: "Show overdue contacts",
+		Use:     "check",
+		Aliases: []string{"status"},
+		Short:   "Show overdue contacts",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
