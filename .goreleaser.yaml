@@ -1,0 +1,34 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - format: tar.gz
+
+brews:
+  - repository:
+      owner: justinabrahms
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/justinabrahms/frm
+    description: CLI friend relationship manager backed by CardDAV
+    license: MIT
+    install: |
+      bin.install "frm"
+
+changelog:
+  sort: asc
