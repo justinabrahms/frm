@@ -24,4 +24,75 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update Homebrew formula
+        env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          DARWIN_AMD64_URL="https://github.com/justinabrahms/frm/releases/download/${GITHUB_REF_NAME}/frm_${VERSION}_darwin_amd64.tar.gz"
+          DARWIN_ARM64_URL="https://github.com/justinabrahms/frm/releases/download/${GITHUB_REF_NAME}/frm_${VERSION}_darwin_arm64.tar.gz"
+          LINUX_AMD64_URL="https://github.com/justinabrahms/frm/releases/download/${GITHUB_REF_NAME}/frm_${VERSION}_linux_amd64.tar.gz"
+          LINUX_ARM64_URL="https://github.com/justinabrahms/frm/releases/download/${GITHUB_REF_NAME}/frm_${VERSION}_linux_arm64.tar.gz"
+
+          # Download and compute checksums
+          curl -sL "$DARWIN_AMD64_URL" -o /tmp/darwin_amd64.tar.gz
+          curl -sL "$DARWIN_ARM64_URL" -o /tmp/darwin_arm64.tar.gz
+          curl -sL "$LINUX_AMD64_URL" -o /tmp/linux_amd64.tar.gz
+          curl -sL "$LINUX_ARM64_URL" -o /tmp/linux_arm64.tar.gz
+
+          DARWIN_AMD64_SHA=$(sha256sum /tmp/darwin_amd64.tar.gz | awk '{print $1}')
+          DARWIN_ARM64_SHA=$(sha256sum /tmp/darwin_arm64.tar.gz | awk '{print $1}')
+          LINUX_AMD64_SHA=$(sha256sum /tmp/linux_amd64.tar.gz | awk '{print $1}')
+          LINUX_ARM64_SHA=$(sha256sum /tmp/linux_arm64.tar.gz | awk '{print $1}')
+
+          mkdir -p /tmp/homebrew-tap/Formula
+          cat > /tmp/homebrew-tap/Formula/frm.rb << FORMULA
+          class Frm < Formula
+            desc "CLI friend relationship manager backed by CardDAV"
+            homepage "https://github.com/justinabrahms/frm"
+            license "MIT"
+            version "${VERSION}"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "${DARWIN_ARM64_URL}"
+                sha256 "${DARWIN_ARM64_SHA}"
+              else
+                url "${DARWIN_AMD64_URL}"
+                sha256 "${DARWIN_AMD64_SHA}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "${LINUX_ARM64_URL}"
+                sha256 "${LINUX_ARM64_SHA}"
+              else
+                url "${LINUX_AMD64_URL}"
+                sha256 "${LINUX_AMD64_SHA}"
+              end
+            end
+
+            def install
+              bin.install "frm"
+            end
+
+            test do
+              system "#{bin}/frm", "--help"
+            end
+          end
+          FORMULA
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' /tmp/homebrew-tap/Formula/frm.rb
+
+          # Push to tap repo
+          cd /tmp
+          git clone https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/justinabrahms/homebrew-tap.git tap-repo
+          cp -r /tmp/homebrew-tap/Formula tap-repo/
+          cd tap-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/frm.rb
+          git commit -m "Update frm to ${VERSION}"
+          git push

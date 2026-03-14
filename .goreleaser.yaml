@@ -19,16 +19,5 @@ builds:
 archives:
   - format: tar.gz
 
-brews:
-  - repository:
-      owner: justinabrahms
-      name: homebrew-tap
-      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-    homepage: https://github.com/justinabrahms/frm
-    description: CLI friend relationship manager backed by CardDAV
-    license: MIT
-    install: |
-      bin.install "frm"
-
 changelog:
   sort: asc
