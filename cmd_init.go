@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -21,6 +22,40 @@ func init() {
 		},
 	}
 	rootCmd.AddCommand(cmd)
+}
+
+// writeConfig atomically writes the config to path via a temp file + rename.
+// This avoids race conditions with file-sync tools (e.g. Dropbox) that can
+// observe and sync a partially-written or truncated file.
+func writeConfig(path string, cfg Config) error {
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*.json")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("writing config: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("syncing config: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("closing config: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("renaming config: %w", err)
+	}
+	return nil
 }
 
 // prompt reads a line from the scanner, printing the given message first.
@@ -101,12 +136,8 @@ func runInit(r io.Reader, w io.Writer) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling config: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("writing config: %w", err)
+	if err := writeConfig(path, cfg); err != nil {
+		return err
 	}
 
 	fmt.Fprintf(w, "\nConfig written to %s\n", path)
@@ -120,12 +151,8 @@ func runInit(r io.Reader, w io.Writer) error {
 				return err
 			}
 			cfg.Services = append(cfg.Services, svc)
-			data, err = json.MarshalIndent(cfg, "", "  ")
-			if err != nil {
-				return fmt.Errorf("marshaling config: %w", err)
-			}
-			if err := os.WriteFile(path, data, 0o600); err != nil {
-				return fmt.Errorf("writing config: %w", err)
+			if err := writeConfig(path, cfg); err != nil {
+				return err
 			}
 			fmt.Fprintf(w, "Config updated with JMAP service.\n")
 		}
@@ -148,13 +175,14 @@ func promptCardDAV(scanner *bufio.Scanner, w io.Writer) (ServiceConfig, error) {
 	}
 
 	var endpoint string
+	var isFastmail bool
 	switch choice {
 	case "1", "icloud":
 		endpoint = "https://contacts.icloud.com"
 		fmt.Fprintln(w, "Using iCloud endpoint. You will need an app-specific password.")
 		fmt.Fprintln(w, "Generate one at https://appleid.apple.com/account/manage")
 	case "2", "fastmail":
-		endpoint = "https://carddav.fastmail.com"
+		isFastmail = true
 		fmt.Fprintln(w, "Using Fastmail endpoint.")
 	case "3", "custom":
 		endpoint, err = prompt(scanner, w, "CardDAV endpoint URL: ")
@@ -165,7 +193,7 @@ func promptCardDAV(scanner *bufio.Scanner, w io.Writer) (ServiceConfig, error) {
 		return ServiceConfig{}, fmt.Errorf("invalid provider choice %q", choice)
 	}
 
-	if endpoint == "" {
+	if !isFastmail && endpoint == "" {
 		return ServiceConfig{}, fmt.Errorf("endpoint URL is required")
 	}
 
@@ -175,6 +203,11 @@ func promptCardDAV(scanner *bufio.Scanner, w io.Writer) (ServiceConfig, error) {
 	}
 	if username == "" {
 		return ServiceConfig{}, fmt.Errorf("username is required")
+	}
+
+	if isFastmail {
+		endpoint = "https://carddav.fastmail.com/dav/addressbooks/user/" + username + "/Default"
+		fmt.Fprintf(w, "Endpoint: %s\n", endpoint)
 	}
 
 	fmt.Fprintln(w, "Note: password will be visible as you type (no terminal raw mode).")
