@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Enforce Conventional Commits: type(optional scope): description
+# See https://www.conventionalcommits.org/
+
+commit_msg_file="$1"
+commit_msg=$(head -1 "$commit_msg_file")
+
+# Allow merge commits
+if echo "$commit_msg" | grep -qE '^Merge '; then
+  exit 0
+fi
+
+# Conventional commit pattern: type(scope)?: description
+# Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?(!)?: .+'
+
+if ! echo "$commit_msg" | grep -qE "$pattern"; then
+  echo "ERROR: Commit message does not follow Conventional Commits format."
+  echo ""
+  echo "  Expected: <type>(<optional scope>): <description>"
+  echo "  Got:      $commit_msg"
+  echo ""
+  echo "  Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+  echo "  Examples:"
+  echo "    feat: add fuzzy matching for contact lookup"
+  echo "    fix(carddav): normalize unicode in name comparison"
+  echo ""
+  exit 1
+fi

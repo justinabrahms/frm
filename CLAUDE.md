@@ -39,6 +39,19 @@ All stored on contacts in the CardDAV server:
 Flags:
 - `--limit N` — max contacts to return (default 5, `-1` for unlimited)
 
+## Commit messages
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/). A git hook in `.githooks/` enforces the format locally, and CI lints PR commits via commitlint.
+
+Format: `<type>(<optional scope>): <description>`
+
+Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
+
+To enable the local hook after cloning:
+```
+git config core.hooksPath .githooks
+```
+
 ## Conventions
 
 - Commands that list all contacts use `allContactsMulti(cfg)` to support multi-account
