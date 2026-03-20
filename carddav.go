@@ -23,22 +23,27 @@ func newCardDAVClient(svc ServiceConfig) (*carddav.Client, error) {
 }
 
 func findAddressBook(ctx context.Context, client *carddav.Client) (*carddav.AddressBook, error) {
+	// Try standard CardDAV discovery: principal → home set → address books.
 	principal, err := client.FindCurrentUserPrincipal(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("finding user principal: %w", err)
+	if err == nil {
+		homeSet, err := client.FindAddressBookHomeSet(ctx, principal)
+		if err == nil {
+			books, err := client.FindAddressBooks(ctx, homeSet)
+			if err == nil && len(books) > 0 {
+				return &books[0], nil
+			}
+		}
 	}
-	homeSet, err := client.FindAddressBookHomeSet(ctx, principal)
-	if err != nil {
-		return nil, fmt.Errorf("finding address book home set: %w", err)
+
+	// Discovery failed — the endpoint may already be an address book path
+	// (e.g. Fastmail's /dav/addressbooks/user/{user}/Default).
+	// Try using the endpoint directly.
+	books, err := client.FindAddressBooks(ctx, "")
+	if err == nil && len(books) > 0 {
+		return &books[0], nil
 	}
-	books, err := client.FindAddressBooks(ctx, homeSet)
-	if err != nil {
-		return nil, fmt.Errorf("finding address books: %w", err)
-	}
-	if len(books) == 0 {
-		return nil, fmt.Errorf("no address books found")
-	}
-	return &books[0], nil
+
+	return nil, fmt.Errorf("could not discover address books (tried standard discovery and direct endpoint)")
 }
 
 func queryAllContacts(ctx context.Context, client *carddav.Client, book *carddav.AddressBook) ([]carddav.AddressObject, error) {
@@ -94,7 +99,7 @@ func findContactByName(ctx context.Context, client *carddav.Client, book *cardda
 // with a notice on stderr. Multiple candidates produce a suggestion error.
 func findContactMulti(cfg Config, name string) (*carddav.AddressObject, *carddav.Client, error) {
 	ctx := context.Background()
-	nameLower := strings.ToLower(name)
+
 
 	// Collect all contacts across accounts for fuzzy fallback.
 	type objWithClient struct {
@@ -117,7 +122,7 @@ func findContactMulti(cfg Config, name string) (*carddav.AddressObject, *carddav
 			continue
 		}
 		for _, obj := range objs {
-			if strings.ToLower(contactName(obj)) == nameLower {
+			if normalizedTokensEqual(contactName(obj), name) {
 				return &obj, client, nil
 			}
 			allObjs = append(allObjs, objWithClient{obj: obj, client: client})
@@ -155,7 +160,7 @@ type contactMatch struct {
 // Uses the same fuzzy fallback logic as findContactMulti.
 func findAllContactsMulti(cfg Config, name string) ([]contactMatch, error) {
 	ctx := context.Background()
-	nameLower := strings.ToLower(name)
+
 	var matches []contactMatch
 
 	type objWithClient struct {
@@ -178,7 +183,7 @@ func findAllContactsMulti(cfg Config, name string) ([]contactMatch, error) {
 			continue
 		}
 		for _, obj := range objs {
-			if strings.ToLower(contactName(obj)) == nameLower {
+			if normalizedTokensEqual(contactName(obj), name) {
 				o := obj
 				matches = append(matches, contactMatch{obj: &o, client: client})
 			}

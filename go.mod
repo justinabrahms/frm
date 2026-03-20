@@ -1,6 +1,6 @@
 module github.com/justinabrahms/frm
 
-go 1.24.1
+go 1.25.0
 
 require (
 	github.com/emersion/go-vcard v0.0.0-20241024213814-c9703dde27ff
@@ -15,6 +15,7 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/oauth2 v0.4.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 )
