@@ -1,3 +1,8 @@
+---
+name: frm
+description: "CLI friend/relationship manager backed by CardDAV. Use when the user asks about overdue contacts, preparing for a meeting with someone, logging interactions, triaging or categorizing contacts, checking relationship tracking stats, managing contact groups, or snoozing reminders."
+---
+
 # frm — Agent Skill
 
 `frm` is a CLI friend/relationship manager backed by CardDAV. Use it to help the user maintain their personal and professional relationships.

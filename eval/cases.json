@@ -1,0 +1,122 @@
+[
+  {
+    "id": "overdue_check",
+    "prompt": "Who should I reach out to? I've been slacking on keeping up with people.",
+    "description": "User wants to see overdue contacts",
+    "expected_commands": ["frm check --json"],
+    "must_include": ["check", "--json"],
+    "must_not_include": []
+  },
+  {
+    "id": "meeting_prep",
+    "prompt": "I have a meeting with Jane tomorrow, what do I need to know?",
+    "description": "User wants meeting prep for a specific contact",
+    "expected_commands": ["frm context \"Jane\" --json"],
+    "must_include": ["context", "Jane", "--json"],
+    "must_not_include": []
+  },
+  {
+    "id": "log_interaction",
+    "prompt": "I just had coffee with Bob and we talked about his new startup idea.",
+    "description": "User wants to log an interaction",
+    "expected_commands": ["frm log \"Bob\" --note"],
+    "must_include": ["log", "Bob", "--note"],
+    "must_not_include": []
+  },
+  {
+    "id": "log_past_interaction",
+    "prompt": "I forgot to log it but I ran into Sarah at the grocery store 3 days ago. We chatted briefly.",
+    "description": "User wants to log a past interaction with --when",
+    "expected_commands": ["frm log \"Sarah\" --note \"...\" --when -3d"],
+    "must_include": ["log", "Sarah", "--note", "--when"],
+    "must_not_include": []
+  },
+  {
+    "id": "set_frequency",
+    "prompt": "I want to make sure I talk to Mike every two weeks.",
+    "description": "User wants to set tracking frequency",
+    "expected_commands": ["frm track \"Mike\" --every 2w"],
+    "must_include": ["track", "Mike", "--every", "2w"],
+    "must_not_include": []
+  },
+  {
+    "id": "bulk_triage",
+    "prompt": "Help me go through all my unorganized contacts and categorize them.",
+    "description": "User wants bulk triage of contacts",
+    "expected_commands": ["frm triage --json"],
+    "must_include": ["triage", "--json"],
+    "must_not_include": []
+  },
+  {
+    "id": "ignore_contact",
+    "prompt": "I don't need to track my dentist Dr. Phillips. Hide them permanently.",
+    "description": "User wants to permanently ignore a contact",
+    "expected_commands": ["frm ignore \"Dr. Phillips\""],
+    "must_include": ["ignore", "Phillips"],
+    "must_not_include": ["snooze"]
+  },
+  {
+    "id": "snooze_vs_ignore",
+    "prompt": "My friend Alex is traveling abroad for the next 3 months, I don't need reminders about them until they're back.",
+    "description": "User wants temporary suppression (snooze, not ignore)",
+    "expected_commands": ["frm snooze \"Alex\" --until 3m"],
+    "must_include": ["snooze", "Alex", "--until"],
+    "must_not_include": ["ignore"]
+  },
+  {
+    "id": "group_assign",
+    "prompt": "Add Lisa to my professional contacts group.",
+    "description": "User wants to assign a contact to a group",
+    "expected_commands": ["frm group set \"Lisa\" professional"],
+    "must_include": ["group", "set", "Lisa", "professional"],
+    "must_not_include": []
+  },
+  {
+    "id": "dashboard_stats",
+    "prompt": "Give me an overview of how I'm doing with keeping up with people.",
+    "description": "User wants stats/dashboard",
+    "expected_commands": ["frm stats --json"],
+    "must_include": ["stats", "--json"],
+    "must_not_include": []
+  },
+  {
+    "id": "history_lookup",
+    "prompt": "When was the last time I talked to Tom and what did we discuss?",
+    "description": "User wants interaction history for a contact",
+    "expected_commands": ["frm history \"Tom\" --json"],
+    "must_include": ["history", "Tom", "--json"],
+    "must_not_include": []
+  },
+  {
+    "id": "list_all_contacts",
+    "prompt": "Show me everyone in my address book, even people I'm not tracking.",
+    "description": "User wants to see all contacts including untracked",
+    "expected_commands": ["frm list --all --json"],
+    "must_include": ["list", "--all", "--json"],
+    "must_not_include": []
+  },
+  {
+    "id": "stop_tracking",
+    "prompt": "I don't want to track my interactions with Carol anymore but don't hide her completely.",
+    "description": "User wants to untrack (not ignore)",
+    "expected_commands": ["frm untrack \"Carol\""],
+    "must_include": ["untrack", "Carol"],
+    "must_not_include": ["ignore"]
+  },
+  {
+    "id": "duration_format",
+    "prompt": "Set a monthly check-in reminder for Dave.",
+    "description": "User wants monthly frequency — tests duration format knowledge",
+    "expected_commands": ["frm track \"Dave\" --every 1m"],
+    "must_include": ["track", "Dave", "--every"],
+    "must_not_include": []
+  },
+  {
+    "id": "ambiguous_reach_out",
+    "prompt": "Who am I overdue to contact?",
+    "description": "Ambiguous phrasing that should trigger check, not list",
+    "expected_commands": ["frm check --json"],
+    "must_include": ["check", "--json"],
+    "must_not_include": []
+  }
+]
